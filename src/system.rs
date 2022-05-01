@@ -67,7 +67,7 @@ impl System {
 
     #[inline(always)]
     pub fn energy(&self) -> f64 {
-        self.energy
+        self.energy / 2.0
     }
 
     #[inline(always)]
@@ -83,9 +83,16 @@ impl System {
         self.recalculate_m();
     }
 
+    #[inline(always)]
     pub fn row_sum_energies(&self) -> &Vec<f64> {
         &self.row_sum_energies
     }
+
+    #[inline(always)]
+    pub fn energy_matrix(&self) -> &Vec<Vec<f64>> { &self.energy_matrix }
+
+    #[inline(always)]
+    pub fn energy_matrix_default(&self) -> &Vec<Vec<f64>> { &self.energy_matrix_default }
 
     pub fn recalculate_m(&mut self) {
         let plus = self.element_signs.count_ones();
@@ -101,7 +108,7 @@ impl System {
                     * bool_to_one(self.element_signs[row])
                     * bool_to_one(self.element_signs[col])
             }
-            self.row_sum_energies[row] = self.energy_matrix[row].iter().sum::<f64>() / 2.0f64;
+            self.row_sum_energies[row] = self.energy_matrix[row].iter().sum::<f64>();
         }
         self.energy = self.row_sum_energies.iter().sum::<f64>();
     }
@@ -116,7 +123,7 @@ impl System {
         self.recalculate_energy();
     }
 
-    pub fn reverse_spins(&mut self, indexes: impl Iterator<Item = usize>) {
+    pub fn reverse_spins(&mut self, indexes: impl Iterator<Item=usize>) {
         for index in indexes {
             let new_spin = !self.element_signs[index];
             self.element_signs.set(index, new_spin);
@@ -174,17 +181,18 @@ impl System {
     pub fn stats(&self) {
         use prettytable::{Cell, Row, Table};
         use std::collections::HashMap;
-        let mut map = HashMap::<_, (String, f64)>::new();
+        let mut map = HashMap::<_, (String, f64, f64)>::new();
 
         for energies in &self.energy_matrix {
             for energy in energies {
                 let energy = (energy * 1_0000000000.0).round() / 1_0000000000.0;
                 map.entry(OrderedFloat(energy.abs()))
-                    .and_modify(|(s, sum)| {
+                    .and_modify(|(s, sum, sum_abs)| {
                         s.push(if energy.is_sign_positive() { '+' } else { '-' });
                         *sum += energy;
+                        *sum_abs += energy.abs();
                     })
-                    .or_insert((String::new(), 0.0));
+                    .or_insert((String::new(), 0.0, 0.0));
             }
         }
 
@@ -199,9 +207,10 @@ impl System {
             Cell::new("p"),
             Cell::new("m"),
             Cell::new("sum"),
+            Cell::new("sum_abs"),
         ]));
 
-        for (energy, (signs, sum)) in values.iter().take(10) {
+        for (energy, (signs, sum, sum_abs)) in values.iter().take(10) {
             let p = signs.chars().filter(|c| *c == '+').count();
             let m = signs.chars().filter(|c| *c == '-').count();
             table.add_row(Row::new(vec![
@@ -210,6 +219,7 @@ impl System {
                 Cell::new(&p.to_string()),
                 Cell::new(&m.to_string()),
                 Cell::new(&sum.to_string()),
+                Cell::new(&sum_abs.to_string()),
             ]));
         }
 
@@ -243,7 +253,7 @@ impl System {
                 0.0,
                 state
             )
-            .expect("Error");
+                .expect("Error");
         }
 
         std::fs::write(filename, buffer).expect("Error on write to file");
@@ -269,60 +279,60 @@ impl System {
         let mut diagonal = Worksheet::default();
         diagonal.set_title("Diagonal");
 
-        full.get_cell_by_column_and_row_mut(START_INDEX_CELL.col, START_INDEX_CELL.row)
+        full.get_cell_by_column_and_row_mut(&START_INDEX_CELL.col, &START_INDEX_CELL.row)
             .set_value("Index");
         diagonal
-            .get_cell_by_column_and_row_mut(START_INDEX_CELL.col, START_INDEX_CELL.row)
+            .get_cell_by_column_and_row_mut(&START_INDEX_CELL.col, &START_INDEX_CELL.row)
             .set_value("Index");
 
-        full.get_cell_by_column_and_row_mut(START_VALUE_CELL.col, START_VALUE_CELL.row)
+        full.get_cell_by_column_and_row_mut(&START_VALUE_CELL.col, &START_VALUE_CELL.row)
             .set_value("Value");
         diagonal
-            .get_cell_by_column_and_row_mut(START_VALUE_CELL.col, START_VALUE_CELL.row)
+            .get_cell_by_column_and_row_mut(&START_VALUE_CELL.col, &START_VALUE_CELL.row)
             .set_value("Value");
 
         for (i, v) in self.element_signs.iter().enumerate() {
             let i = i as u32;
 
-            full.get_cell_by_column_and_row_mut(START_INDEX_CELL.col + 1 + i, START_INDEX_CELL.row)
+            full.get_cell_by_column_and_row_mut(&(START_INDEX_CELL.col + 1 + i), &START_INDEX_CELL.row)
                 .set_value_from_u32(i as u32);
             diagonal
-                .get_cell_by_column_and_row_mut(START_INDEX_CELL.col + 1 + i, START_INDEX_CELL.row)
+                .get_cell_by_column_and_row_mut(&(START_INDEX_CELL.col + 1 + i), &START_INDEX_CELL.row)
                 .set_value_from_u32(i as u32);
 
             full.get_cell_by_column_and_row_mut(
-                START_VALUE_CELL.col + 1 + i,
-                START_VALUE_CELL.row,
+                &(START_VALUE_CELL.col + 1 + i),
+                &START_VALUE_CELL.row,
             )
-            .set_value_from_i32(bool_to_one(*v) as i32);
+                .set_value_from_i32(bool_to_one(*v) as i32);
             diagonal
                 .get_cell_by_column_and_row_mut(
-                    START_VALUE_CELL.col + 1 + i,
-                    START_VALUE_CELL.row,
+                    &(START_VALUE_CELL.col + 1 + i),
+                    &START_VALUE_CELL.row,
                 )
                 .set_value_from_i32(bool_to_one(*v) as i32);
 
             full.get_cell_by_column_and_row_mut(
-                START_MATRIX_INDEX.col + 1 + i,
-                START_MATRIX_INDEX.row,
+                &(START_MATRIX_INDEX.col + 1 + i),
+                &START_MATRIX_INDEX.row,
             )
-            .set_value_from_u32(i as u32);
+                .set_value_from_u32(i as u32);
             diagonal
                 .get_cell_by_column_and_row_mut(
-                    START_MATRIX_INDEX.col + 1 + i,
-                    START_MATRIX_INDEX.row,
+                    &(START_MATRIX_INDEX.col + 1 + i),
+                    &START_MATRIX_INDEX.row,
                 )
                 .set_value_from_u32(i as u32);
 
             full.get_cell_by_column_and_row_mut(
-                START_MATRIX_INDEX.col,
-                START_MATRIX_INDEX.row + 1 + i,
+                &START_MATRIX_INDEX.col,
+                &(START_MATRIX_INDEX.row + 1 + i),
             )
-            .set_value_from_u32(i as u32);
+                .set_value_from_u32(i as u32);
             diagonal
                 .get_cell_by_column_and_row_mut(
-                    START_MATRIX_INDEX.col,
-                    START_MATRIX_INDEX.row + 1 + i,
+                    &START_MATRIX_INDEX.col,
+                    &(START_MATRIX_INDEX.row + 1 + i),
                 )
                 .set_value_from_u32(i as u32);
         }
@@ -343,7 +353,7 @@ impl System {
                 let x_ref =
                     coordinate_from_index(&(START_VALUE_CELL.col + 1 + x), &START_VALUE_CELL.row);
 
-                full.get_cell_by_column_and_row_mut(xi, yi)
+                full.get_cell_by_column_and_row_mut(&xi, &yi)
                     .set_formula(format!(
                         "={y_ref} * {x_ref} * {}",
                         self.energy_matrix_default[y as usize][x as usize]
@@ -351,7 +361,7 @@ impl System {
 
                 if x >= y {
                     diagonal
-                        .get_cell_by_column_and_row_mut(xi, yi)
+                        .get_cell_by_column_and_row_mut(&xi, &yi)
                         .set_formula(format!(
                             "={y_ref} * {x_ref} * {}",
                             self.energy_matrix_default[x as usize][y as usize]
@@ -366,49 +376,21 @@ impl System {
                 &(START_MATRIX_VALUE.row + size - 1),
             );
 
-            full.get_cell_by_column_and_row_mut(sum_start_cell.col + y, sum_start_cell.row)
+            full.get_cell_by_column_and_row_mut(&(sum_start_cell.col + y), &sum_start_cell.row)
                 .set_formula(format!("=SUM({start_ref}:{end_ref})"));
             diagonal
-                .get_cell_by_column_and_row_mut(sum_start_cell.col + y, sum_start_cell.row)
+                .get_cell_by_column_and_row_mut(&(sum_start_cell.col + y), &sum_start_cell.row)
                 .set_formula(format!("=SUM({start_ref}:{end_ref})"));
         }
 
         let start_ref = coordinate_from_index(&sum_start_cell.col, &sum_start_cell.row);
         let end_ref = coordinate_from_index(&(sum_start_cell.col + size - 1), &sum_start_cell.row);
 
-        full.get_cell_by_column_and_row_mut(sum_start_cell.col + size + 1, sum_start_cell.row)
+        full.get_cell_by_column_and_row_mut(&(sum_start_cell.col + size + 1), &sum_start_cell.row)
             .set_formula(format!("=SUM({start_ref}:{end_ref}) / 2"));
         diagonal
-            .get_cell_by_column_and_row_mut(sum_start_cell.col + size + 1, sum_start_cell.row)
+            .get_cell_by_column_and_row_mut(&(sum_start_cell.col + size + 1), &sum_start_cell.row)
             .set_formula(format!("=SUM({start_ref}:{end_ref})"));
-
-        // let start_ref = coordinate_from_index(&START_MATRIX_VALUE.col, &START_MATRIX_VALUE.row);
-        // let end_ref = coordinate_from_index(&(START_MATRIX_VALUE.col + size - 1), &(START_MATRIX_VALUE.row + size - 1));
-        //
-        // let mut conditional_set = ConditionalSet::default();
-        //
-        // let mut sor = SequenceOfReferences::default();
-        // let mut range = Range::default();
-        // range.set_range(format!("{start_ref}:{end_ref}"));
-        // sor.add_range_collection(range);
-        //
-        // let mut conditional = Conditional::default();
-        // conditional.set_condition_type("colorScale");
-        // conditional.set_data_type("colorScale");
-        //
-        // let mut color1 = Color::default();
-        // color1.set_argb("FFFCFCFF");
-        // conditional.add_cfvo_collection("min", None, Some(color1));
-        //
-        // let mut color2 = Color::default();
-        // color2.set_argb("FFF8696B");
-        // conditional.add_cfvo_collection("max", None, Some(color2));
-        //
-        // conditional_set.get_conditional_collection_mut().push(conditional);
-        // conditional_set.set_sequence_of_references(sor);
-        //
-        // full.set_conditional_styles_collection(vec![conditional_set.clone()]);
-        // diagonal.set_conditional_styles_collection(vec![conditional_set.clone()]);
 
         *book.get_sheet_collection_mut() = Vec::with_capacity(2);
         book.add_sheet(full).expect("error");

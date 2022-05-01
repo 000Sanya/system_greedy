@@ -7,6 +7,12 @@ pub struct Element {
 }
 
 impl Element {
+    pub fn new(pos: Vec2, magn: Vec2) -> Self {
+        Self {
+            pos, magn
+        }
+    }
+
     pub fn energy_with(&self, element: &Element) -> f64 {
         let pij = self.pos - element.pos;
 

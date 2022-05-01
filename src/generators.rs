@@ -71,4 +71,53 @@ impl LatticeGenerator {
 
         System::new(elements)
     }
+
+    pub fn honeycomb() -> System {
+        let sqrt_3 = 3.0f64.sqrt();
+
+        let pos = [
+            Vec2::new(sqrt_3, 0.75),
+            Vec2::new((3.0 * sqrt_3) / 4.0, 1.5),
+            Vec2::new(sqrt_3 / 4.0, 1.5),
+            Vec2::new(0.0, 0.75),
+            Vec2::new(sqrt_3 / 4.0, 0.0),
+            Vec2::new((3.0 * sqrt_3) / 4.0, 0.0),
+            Vec2::new((7.0 * sqrt_3) / 4.0, 1.5),
+            Vec2::new((5.0 * sqrt_3) / 4.0, 1.5),
+            Vec2::new((5.0 * sqrt_3) / 4.0, 0.0),
+            Vec2::new((7.0 * sqrt_3) / 4.0, 0.0),
+            Vec2::new(sqrt_3 / 2.0, 2.25),
+            Vec2::new((3.0 * sqrt_3) / 2.0, 2.25),
+            Vec2::new(sqrt_3 * 2.0, 0.75),
+            Vec2::new((9.0 * sqrt_3) / 4.0, 0.0),
+            Vec2::new((9.0 * sqrt_3) / 4.0, 1.5),
+            Vec2::new((5.0 * sqrt_3) / 2.0, 2.25),
+            Vec2::new((11.0 * sqrt_3) / 4.0, 0.0),
+            Vec2::new((11.0 * sqrt_3) / 4.0, 1.5),
+        ];
+
+        let magn = [
+            Vec2::new(0.0, 1.0),
+            Vec2::new(-sqrt_3 / 2.0, 0.5),
+            Vec2::new(sqrt_3 / 2.0, 0.5),
+            Vec2::new(0.0, 1.0),
+            Vec2::new(-sqrt_3 / 2.0, 0.5),
+            Vec2::new(sqrt_3 / 2.0, 0.5),
+            Vec2::new(-sqrt_3 / 2.0, 0.5),
+            Vec2::new(sqrt_3 / 2.0, 0.5),
+            Vec2::new(-sqrt_3 / 2.0, 0.5),
+            Vec2::new(sqrt_3 / 2.0, 0.5),
+            Vec2::new(0.0, 1.0),
+            Vec2::new(0.0, 1.0),
+            Vec2::new(0.0, 1.0),
+            Vec2::new(-sqrt_3 / 2.0, 0.5),
+            Vec2::new(sqrt_3 / 2.0, 0.5),
+            Vec2::new(0.0, 1.0),
+            Vec2::new(sqrt_3 / 2.0, 0.5),
+            Vec2::new(-sqrt_3 / 2.0, 0.5),
+        ];
+
+        let elements = (0..18).map(|i| Element::new(pos[i], magn[i]));
+        System::new(elements.collect())
+    }
 }

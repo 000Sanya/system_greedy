@@ -6,6 +6,7 @@ use plotters::prelude::*;
 use rayon::prelude::*;
 use std::cmp::Reverse;
 use std::collections::HashMap;
+use num_traits::float::FloatCore;
 use system::System;
 use tap::Tap;
 
@@ -13,41 +14,39 @@ mod element;
 mod generators;
 mod system;
 
+
+
 struct States {
-    states: HashMap<BitVec, f64>,
     pair: (BitVec, f64, isize),
-    actions: Vec<(BitVec, f64, StateAction)>,
+    actions: Vec<(BitVec, f64, StateActionKind)>,
 }
 
-#[derive(Eq, PartialEq)]
-enum StateAction {
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum StateActionKind {
     Greedy,
     Step2,
     Step3,
+    Minimize1,
+    Minimize2,
 }
 
 impl States {
     pub fn new((cols, rows): (u64, u64)) -> Self {
         Self {
-            states: Default::default(),
             pair: (Default::default(), f64::MAX, (cols * rows * 5) as isize),
             actions: vec![],
         }
     }
 
-    pub fn save_state(&mut self, system: &System, action_type: StateAction) {
+    pub fn save_state(&mut self, system: &System, action_type: StateActionKind) {
         self.actions
             .push((system.element_signs().clone(), system.energy(), action_type));
-        if system.magn() <= self.pair.2.abs() {
-            self.states
-                .insert(system.element_signs().clone(), system.energy());
-            if self.pair.1 > system.energy() {
-                self.pair = (
-                    system.element_signs().clone(),
-                    system.energy(),
-                    system.magn(),
-                );
-            }
+        if self.pair.1 > system.energy() {
+            self.pair = (
+                system.element_signs().clone(),
+                system.energy(),
+                system.magn(),
+            );
         }
     }
 }
@@ -106,7 +105,7 @@ fn gibrid(system: &mut System, states: &mut States) {
     */
     while !system.all_row_energies_negative() {
         system.greedy_step();
-        states.save_state(system, StateAction::Greedy);
+        states.save_state(system, StateActionKind::Greedy);
     }
 
     /*
@@ -114,22 +113,7 @@ fn gibrid(system: &mut System, states: &mut States) {
     */
     for i in 0..system_size {
         system.reverse_spin(i);
-        states.save_state(system, StateAction::Step2);
-
-        // let sorted = system
-        //     .row_sum_energies
-        //     .iter()
-        //     .copied()
-        //     .enumerate()
-        //     .collect::<Vec<_>>()
-        //     .tap_mut(|v| v.sort_by_key(|(_, x)| OrderedFloat(*x)));
-        //
-        //
-        // if sorted[0].0 == i {
-        //     system.reverse_spin(i);
-        //     let _ = states.actions.pop();
-        //     continue;
-        // }
+        states.save_state(system, StateActionKind::Step2);
 
         let sorted = system
             .row_sum_energies()
@@ -137,16 +121,31 @@ fn gibrid(system: &mut System, states: &mut States) {
             .copied()
             .enumerate()
             .collect::<Vec<_>>()
-            .tap_mut(|v| v.sort_by_key(|(_, x)| Reverse(OrderedFloat(*x))));
+            .tap_mut(|v| v.sort_by_key(|(_, x)| OrderedFloat(*x)));
 
-        if sorted[0].0 == i || sorted[0].1.is_sign_negative() {
+
+        if sorted[0].0 == i {
             system.reverse_spin(i);
             let _ = states.actions.pop();
             continue;
         }
 
+        // let sorted = system
+        //     .row_sum_energies()
+        //     .iter()
+        //     .copied()
+        //     .enumerate()
+        //     .collect::<Vec<_>>()
+        //     .tap_mut(|v| v.sort_by_key(|(_, x)| Reverse(OrderedFloat(*x))));
+        //
+        // if sorted[0].0 == i || sorted[0].1.is_sign_negative() {
+        //     system.reverse_spin(i);
+        //     let _ = states.actions.pop();
+        //     continue;
+        // }
+
         system.reverse_spin(sorted[0].0);
-        states.save_state(system, StateAction::Step2);
+        states.save_state(system, StateActionKind::Step2);
 
         /*
             Реализация шага 1 внутри шага 2
@@ -154,7 +153,7 @@ fn gibrid(system: &mut System, states: &mut States) {
         if !system.all_row_energies_negative() {
             while !system.all_row_energies_negative() {
                 system.greedy_step();
-                states.save_state(system, StateAction::Step2);
+                states.save_state(system, StateActionKind::Step2);
             }
         }
     }
@@ -166,46 +165,96 @@ fn gibrid(system: &mut System, states: &mut States) {
     //         );
     //         while !system.all_row_energies_negative() {
     //             system.greedy_step();
-    //             states.save_state(&system, StateAction::Greedy);
+    //             states.save_state(&system, StateActionKind::Greedy);
     //         }
-    //         states.save_state(&system, StateAction::Step3)
+    //         states.save_state(&system, StateActionKind::Step3)
     //     }
     // }
 }
 
-fn main() {
-    let cols = 4;
-    let rows = 4;
-    let c = 376.0;
+fn minimize_cells(system: &mut System, states: &mut States) {
+    let mut hash_map: HashMap<_, Vec<(usize, usize)>> = HashMap::new();
 
-    //Создание системы
-    let mut system = LatticeGenerator::cairo(472.0, 344.0, c, 300.0, cols, rows);
-    let mut states = States::new((cols, rows));
+    let round = |x: f64| (x * 1_0000000000.0).round() / 1_0000000000.0;
 
-    gibrid(&mut system, &mut states);
+    let mut rounded_matrix = Vec::with_capacity(system.system_size());
 
-    println!("{} {}", states.pair.0, states.pair.1);
+    for y in 0..system.system_size() {
+        rounded_matrix.push(Vec::new());
+        for x in 0..system.system_size() {
+            let e = OrderedFloat(round(system.energy_matrix()[y][x]));
+            rounded_matrix[y].push(e);
 
-    system.set_element_signs(states.pair.0.clone());
+            if e.abs() == 0.0 {
+                continue;
+            }
 
-    let dir_name = format!(
-        "results/cairo_{}_{}x{}_{}",
-        system.system_size(),
-        cols,
-        rows,
-        c
-    );
-    std::fs::create_dir_all(&dir_name).unwrap();
+            hash_map.entry(e.abs())
+                .and_modify(|cells| cells.push((x, y)))
+                .or_insert(Vec::new());
+        }
+    }
 
-    system.save_system(format!("{dir_name}/algorithm.mfsys"));
-    system.save_in_excel(format!("{dir_name}/algorithm.xlsx"));
+    let mut keys: Vec<_> = hash_map.keys().copied().collect();
+    keys.sort_by_key(|x| Reverse(*x));
+
+    for (key_index, key) in keys.iter().enumerate().take(20) {
+        let greater_keys = &keys[0..key_index];
+
+        for (x, y) in &hash_map[key] {
+            let cant_change = rounded_matrix[*y].iter().any(|x| greater_keys.contains(x));
+            if cant_change {
+                let e1 = system.energy();
+                system.reverse_spins([x, y].into_iter().copied());
+
+                if e1 < system.energy() {
+                    system.reverse_spins([x, y].into_iter().copied());
+                } else {
+                    states.save_state(system, StateActionKind::Minimize2);
+                }
+            }
+
+            if system.energy_matrix()[*y][*x].is_sign_positive() {
+                let old_e = system.energy();
+
+                system.reverse_spin(*x);
+                let e1 = system.energy();
+                system.reverse_spin(*x);
+
+                system.reverse_spin(*y);
+                let e2 = system.energy();
+                system.reverse_spin(*y);
+
+                if old_e > e1 || old_e > e2 {
+                    if e1 < e2 {
+                        system.reverse_spin(*x)
+                    } else {
+                        system.reverse_spin(*y)
+                    }
+
+                    states.save_state(system, StateActionKind::Minimize1);
+                }
+            } else {
+                let e1 = system.energy();
+                system.reverse_spins([x, y].into_iter().copied());
+
+                if e1 < system.energy() {
+                    system.reverse_spins([x, y].into_iter().copied());
+                } else {
+                    states.save_state(system, StateActionKind::Minimize2);
+                }
+            }
+        }
+    }
+}
+
+fn draw_state(states: &States, dir_name: &str) {
+    let States { pair, actions, .. } = states;
 
     let image_path = format!("{dir_name}/chart.png");
     let root_drawing_area = BitMapBackend::new(&image_path, (1024, 768)).into_drawing_area();
 
     root_drawing_area.fill(&WHITE).unwrap();
-
-    let States { pair, actions, .. } = states;
 
     let mut ctx = ChartBuilder::on(&root_drawing_area)
         .caption("Ход работы алгоритма", ("Arial", 40))
@@ -225,35 +274,79 @@ fn main() {
         actions.iter().enumerate().map(|(i, (_, e, _))| (i, *e)),
         &GREEN,
     ))
-    .unwrap();
+        .unwrap();
 
     ctx.draw_series(
         actions
             .iter()
             .enumerate()
-            .filter(|(_, (_, _, a))| *a == StateAction::Greedy)
+            .filter(|(_, (_, _, a))| *a == StateActionKind::Greedy)
             .map(|(i, (_, e, _))| (i, *e))
             .map(|p| Circle::new(p, 2, &RED)),
     )
-    .unwrap();
+        .unwrap();
 
     ctx.draw_series(
         actions
             .iter()
             .enumerate()
-            .filter(|(_, (_, _, a))| *a == StateAction::Step2)
+            .filter(|(_, (_, _, a))| *a == StateActionKind::Step2)
             .map(|(i, (_, e, _))| (i, *e))
             .map(|p| Circle::new(p, 2, &BLUE)),
     )
-    .unwrap();
+        .unwrap();
 
     ctx.draw_series(
         actions
             .iter()
             .enumerate()
-            .filter(|(_, (_, _, a))| *a == StateAction::Step3)
+            .filter(|(_, (_, _, a))| *a == StateActionKind::Minimize1)
             .map(|(i, (_, e, _))| (i, *e))
             .map(|p| Circle::new(p, 2, &MAGENTA)),
     )
-    .unwrap();
+        .unwrap();
+
+    ctx.draw_series(
+        actions
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, _, a))| *a == StateActionKind::Minimize2)
+            .map(|(i, (_, e, _))| (i, *e))
+            .map(|p| Circle::new(p, 2, &CYAN)),
+    )
+        .unwrap();
+}
+
+fn main() {
+    let cols = 2;
+    let rows = 4;
+    let c = 376.0;
+
+    //Создание системы
+    let mut system = LatticeGenerator::cairo(472.0, 344.0, c, 300.0, cols, rows);
+    let mut states = States::new((cols, rows));
+
+    // minimize_cells(&mut system, &mut states);
+    gibrid(&mut system, &mut states);
+
+    println!("{} {}", states.pair.0, states.pair.1);
+
+    system.set_element_signs(states.pair.0.clone());
+
+    let dir_name = format!(
+        "results/cairo_{}_{}x{}_{}",
+        system.system_size(),
+        cols,
+        rows,
+        c
+    );
+    std::fs::create_dir_all(&dir_name).unwrap();
+
+    system.save_system(format!("{dir_name}/algorithm.mfsys"));
+    system.save_in_excel(format!("{dir_name}/algorithm.xlsx"));
+    draw_state(&states, &dir_name);
+
+    for action in states.actions {
+        println!("{} {:?}", action.1, action.2);
+    }
 }
