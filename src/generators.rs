@@ -72,52 +72,70 @@ impl LatticeGenerator {
         System::new(elements)
     }
 
-    pub fn honeycomb() -> System {
+    pub fn honeycomb(rows: u64, cols: u64) -> System {
         let sqrt_3 = 3.0f64.sqrt();
+        let skip_if_down = [10, 11, 15];
+        let skip_if_right = 18;
 
-        let pos = [
-            Vec2::new(sqrt_3, 0.75),
-            Vec2::new((3.0 * sqrt_3) / 4.0, 1.5),
-            Vec2::new(sqrt_3 / 4.0, 1.5),
-            Vec2::new(0.0, 0.75),
-            Vec2::new(sqrt_3 / 4.0, 0.0),
-            Vec2::new((3.0 * sqrt_3) / 4.0, 0.0),
-            Vec2::new((7.0 * sqrt_3) / 4.0, 1.5),
-            Vec2::new((5.0 * sqrt_3) / 4.0, 1.5),
-            Vec2::new((5.0 * sqrt_3) / 4.0, 0.0),
-            Vec2::new((7.0 * sqrt_3) / 4.0, 0.0),
-            Vec2::new(sqrt_3 / 2.0, 2.25),
-            Vec2::new((3.0 * sqrt_3) / 2.0, 2.25),
-            Vec2::new(sqrt_3 * 2.0, 0.75),
-            Vec2::new((9.0 * sqrt_3) / 4.0, 0.0),
-            Vec2::new((9.0 * sqrt_3) / 4.0, 1.5),
-            Vec2::new((5.0 * sqrt_3) / 2.0, 2.25),
-            Vec2::new((11.0 * sqrt_3) / 4.0, 0.0),
-            Vec2::new((11.0 * sqrt_3) / 4.0, 1.5),
-        ];
+        let mut elements = Vec::new();
+        for row in 0..rows {
+            for col in 0..cols {
+                let pos = [
+                    Vec2::new(sqrt_3, 0.75),
+                    Vec2::new((3.0 * sqrt_3) / 4.0, 1.5),
+                    Vec2::new(sqrt_3 / 4.0, 1.5),
+                    Vec2::new(0.0, 0.75),
+                    Vec2::new(sqrt_3 / 4.0, 0.0),
+                    Vec2::new((3.0 * sqrt_3) / 4.0, 0.0),
+                    Vec2::new((7.0 * sqrt_3) / 4.0, 1.5),
+                    Vec2::new((5.0 * sqrt_3) / 4.0, 1.5),
+                    Vec2::new((5.0 * sqrt_3) / 4.0, 0.0),
+                    Vec2::new((7.0 * sqrt_3) / 4.0, 0.0),
+                    Vec2::new(sqrt_3 / 2.0, 2.25),
+                    Vec2::new((3.0 * sqrt_3) / 2.0, 2.25),
+                    Vec2::new(sqrt_3 * 2.0, 0.75),
+                    Vec2::new((9.0 * sqrt_3) / 4.0, 0.0),
+                    Vec2::new((9.0 * sqrt_3) / 4.0, 1.5),
+                    Vec2::new((5.0 * sqrt_3) / 2.0, 2.25),
+                    Vec2::new((11.0 * sqrt_3) / 4.0, 0.0),
+                    Vec2::new((11.0 * sqrt_3) / 4.0, 1.5),
+                    Vec2::new(sqrt_3 * 3.0, 0.75),
+                ];
 
-        let magn = [
-            Vec2::new(0.0, 1.0),
-            Vec2::new(-sqrt_3 / 2.0, 0.5),
-            Vec2::new(sqrt_3 / 2.0, 0.5),
-            Vec2::new(0.0, 1.0),
-            Vec2::new(-sqrt_3 / 2.0, 0.5),
-            Vec2::new(sqrt_3 / 2.0, 0.5),
-            Vec2::new(-sqrt_3 / 2.0, 0.5),
-            Vec2::new(sqrt_3 / 2.0, 0.5),
-            Vec2::new(-sqrt_3 / 2.0, 0.5),
-            Vec2::new(sqrt_3 / 2.0, 0.5),
-            Vec2::new(0.0, 1.0),
-            Vec2::new(0.0, 1.0),
-            Vec2::new(0.0, 1.0),
-            Vec2::new(-sqrt_3 / 2.0, 0.5),
-            Vec2::new(sqrt_3 / 2.0, 0.5),
-            Vec2::new(0.0, 1.0),
-            Vec2::new(sqrt_3 / 2.0, 0.5),
-            Vec2::new(-sqrt_3 / 2.0, 0.5),
-        ];
+                let magn = [
+                    Vec2::new(0.0, 1.0),
+                    Vec2::new(-sqrt_3 / 2.0, 0.5),
+                    Vec2::new(sqrt_3 / 2.0, 0.5),
+                    Vec2::new(0.0, 1.0),
+                    Vec2::new(-sqrt_3 / 2.0, 0.5),
+                    Vec2::new(sqrt_3 / 2.0, 0.5),
+                    Vec2::new(-sqrt_3 / 2.0, 0.5),
+                    Vec2::new(sqrt_3 / 2.0, 0.5),
+                    Vec2::new(-sqrt_3 / 2.0, 0.5),
+                    Vec2::new(sqrt_3 / 2.0, 0.5),
+                    Vec2::new(0.0, 1.0),
+                    Vec2::new(0.0, 1.0),
+                    Vec2::new(0.0, 1.0),
+                    Vec2::new(-sqrt_3 / 2.0, 0.5),
+                    Vec2::new(sqrt_3 / 2.0, 0.5),
+                    Vec2::new(0.0, 1.0),
+                    Vec2::new(sqrt_3 / 2.0, 0.5),
+                    Vec2::new(-sqrt_3 / 2.0, 0.5),
+                    Vec2::new(0.0, 1.0),
+                ];
 
-        let elements = (0..18).map(|i| Element::new(pos[i], magn[i]));
-        System::new(elements.collect())
+                let down = row == rows - 1;
+                let right = col == cols - 1;
+
+                elements.extend(
+                    (0..=18)
+                        .filter(|x| !(down && skip_if_down.contains(x)))
+                        .filter(|x| *x != skip_if_right || right)
+                        .map(|i| Element::new(pos[i] + Vec2::new(0.0 + sqrt_3 * 3.0 * col as f64, 3.0 * row as f64), magn[i]))
+                )
+            }
+        }
+
+        System::new(elements)
     }
 }

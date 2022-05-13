@@ -1,7 +1,9 @@
+use std::cmp::Reverse;
 use crate::Element;
 use bitvec::prelude::BitVec;
 use ordered_float::OrderedFloat;
 use std::fmt::Write;
+use umya_spreadsheet::OrientationValues::Default;
 
 pub type Vec2 = vek::Vec2<f64>;
 
@@ -13,51 +15,73 @@ pub struct CellRef {
 #[derive(Clone, Debug)]
 pub struct System {
     elements: Vec<Element>,
-    element_signs: BitVec,
+    system_state: BitVec,
     energy_matrix: Vec<Vec<f64>>,
     energy_matrix_default: Vec<Vec<f64>>,
-    row_sum_energies: Vec<f64>,
+    row_energies: Vec<f64>,
     energy: f64,
-    magn: isize,
+    spin_excess: i32,
 }
 
 impl System {
     pub fn new(elements: Vec<Element>) -> Self {
         let mut energy_matrix = Vec::with_capacity(elements.len());
-        let mut row_sum_energies = Vec::with_capacity(elements.len());
+        let mut row_energies = Vec::with_capacity(elements.len());
         for elem in &elements {
             let mut energies = Vec::with_capacity(elements.len());
             for e in &elements {
                 energies.push(elem.energy_with(e))
             }
-            row_sum_energies.push(energies.iter().sum());
+            row_energies.push(energies.iter().sum());
             energy_matrix.push(energies);
         }
 
         let energy_matrix_default = energy_matrix.clone();
 
-        let element_signs = BitVec::repeat(false, elements.len());
+        let system_state = BitVec::repeat(false, elements.len());
 
-        let plus = element_signs.count_ones();
-        let minus = element_signs.count_zeros();
-        let magn = plus as isize - minus as isize;
+        let plus = system_state.count_ones();
+        let minus = system_state.count_zeros();
+        let spin_excess = plus as i32 - minus as i32;
 
-        let energy = row_sum_energies.iter().sum::<f64>();
+        let energy = row_energies.iter().sum::<f64>();
 
         Self {
             elements,
-            element_signs,
+            system_state,
             energy_matrix,
             energy_matrix_default,
-            row_sum_energies,
+            row_energies,
             energy,
-            magn,
+            spin_excess,
+        }
+    }
+
+    pub fn from_default_matrix(default_matrix: Vec<Vec<f64>>) -> Self {
+        let row_energies: Vec<_> = default_matrix.iter().map(|row| row.iter().sum()).collect();
+        let system_state = BitVec::repeat(false, default_matrix.len());
+        let plus = system_state.count_ones();
+        let minus = system_state.count_zeros();
+        let spin_excess = plus as i32 - minus as i32;
+        let energy = row_energies.iter().sum::<f64>();
+        let elements = (0..default_matrix.len()).map(|_| Element::new(Vec2::zero(), Vec2::zero())).collect();
+        let energy_matrix = default_matrix.clone();
+        let energy_matrix_default = default_matrix;
+
+        Self {
+            elements,
+            system_state,
+            energy_matrix,
+            energy_matrix_default,
+            row_energies,
+            energy,
+            spin_excess,
         }
     }
 
     #[inline(always)]
-    pub fn magn(&self) -> isize {
-        self.magn
+    pub fn spin_excess(&self) -> i32 {
+        self.spin_excess
     }
 
     #[inline(always)]
@@ -71,83 +95,86 @@ impl System {
     }
 
     #[inline(always)]
-    pub fn element_signs(&self) -> &BitVec {
-        &self.element_signs
+    pub fn system_state(&self) -> &BitVec {
+        &self.system_state
     }
 
     #[inline(always)]
-    pub fn set_element_signs(&mut self, bits: BitVec) {
+    pub fn set_system_state(&mut self, bits: BitVec) {
         assert_eq!(self.elements.len(), bits.len());
-        self.element_signs = bits;
+        self.system_state = bits;
         self.recalculate_energy();
-        self.recalculate_m();
+        self.recalculate_spin_excess();
     }
 
     #[inline(always)]
-    pub fn row_sum_energies(&self) -> &Vec<f64> {
-        &self.row_sum_energies
+    pub fn row_energies(&self) -> &Vec<f64> {
+        &self.row_energies
     }
 
     #[inline(always)]
     pub fn energy_matrix(&self) -> &Vec<Vec<f64>> { &self.energy_matrix }
 
     #[inline(always)]
-    pub fn energy_matrix_default(&self) -> &Vec<Vec<f64>> { &self.energy_matrix_default }
+    pub fn default_energy_matrix(&self) -> &Vec<Vec<f64>> { &self.energy_matrix_default }
 
-    pub fn recalculate_m(&mut self) {
-        let plus = self.element_signs.count_ones();
-        let minus = self.element_signs.count_zeros();
+    pub fn recalculate_spin_excess(&mut self) {
+        let plus = self.system_state.count_ones();
+        let minus = self.system_state.count_zeros();
 
-        self.magn = plus as isize - minus as isize;
+        self.spin_excess = plus as i32 - minus as i32;
     }
 
     pub fn recalculate_energy(&mut self) {
         for row in 0..self.energy_matrix_default.len() {
             for col in 0..self.energy_matrix_default[row].len() {
                 self.energy_matrix[row][col] = self.energy_matrix_default[row][col]
-                    * bool_to_one(self.element_signs[row])
-                    * bool_to_one(self.element_signs[col])
+                    * bool_to_one(self.system_state[row])
+                    * bool_to_one(self.system_state[col])
             }
-            self.row_sum_energies[row] = self.energy_matrix[row].iter().sum::<f64>();
+            self.row_energies[row] = self.energy_matrix[row].iter().sum::<f64>();
         }
-        self.energy = self.row_sum_energies.iter().sum::<f64>();
+        self.energy = self.row_energies.iter().sum::<f64>();
     }
 
-    pub fn reverse_spin(&mut self, index: usize) {
-        let new_spin = !self.element_signs[index];
-        self.element_signs.set(index, new_spin);
-        match self.element_signs[index] {
-            true => self.magn += 2,
-            false => self.magn -= 2,
+    pub fn reverse_spin(&mut self, spin: usize) {
+        let new_spin = !self.system_state[spin];
+        self.system_state.set(spin, new_spin);
+        match self.system_state[spin] {
+            true => self.spin_excess += 2,
+            false => self.spin_excess -= 2,
         }
-        self.recalculate_energy();
-    }
 
-    pub fn reverse_spins(&mut self, indexes: impl Iterator<Item=usize>) {
-        for index in indexes {
-            let new_spin = !self.element_signs[index];
-            self.element_signs.set(index, new_spin);
-            match self.element_signs[index] {
-                true => self.magn += 2,
-                false => self.magn -= 2,
+        for i in 0..self.system_size() {
+            if i != spin {
+                self.row_energies[spin] -= 2.0 * self.energy_matrix[spin][i];
+                self.row_energies[i] -= 2.0 * self.energy_matrix[spin][i];
+                self.energy -= 4.0 * self.energy_matrix[spin][i];
+
+                self.energy_matrix[spin][i] *= -1.0;
+                self.energy_matrix[i][spin] *= -1.0;
             }
         }
-        self.recalculate_energy();
+    }
+
+    pub fn reverse_spins(&mut self, spines: impl Iterator<Item=usize>) {
+        for spin in spines {
+            self.reverse_spin(spin)
+        }
     }
 
     pub fn greedy_step(&mut self) {
         let index = self
-            .row_sum_energies
+            .row_energies
             .iter()
             .enumerate()
             .max_by_key(|(_, x)| OrderedFloat(**x))
-            .unwrap()
-            .0;
+            .unwrap().0;
         self.reverse_spin(index);
     }
 
     pub fn all_row_energies_negative(&self) -> bool {
-        self.row_sum_energies.iter().all(|x| x.is_sign_negative())
+        self.row_energies.iter().all(|x| x.is_sign_negative())
     }
 
     pub fn state_from_binary_string(&mut self, bin_str: &str) {
@@ -156,7 +183,7 @@ impl System {
             .filter(|c| *c == '1' || *c == '0')
             .map(|c| c == '1')
             .enumerate()
-            .filter_map(|(i, value)| (self.element_signs[i] != value).then(|| i))
+            .filter_map(|(i, value)| (self.system_state[i] != value).then(|| i))
             .collect();
 
         self.reverse_spins(iter.iter().copied());
@@ -197,7 +224,7 @@ impl System {
         }
 
         let mut values: Vec<_> = map.iter().collect();
-        values.sort_unstable_by(|(f, _), (f2, _)| f2.cmp(f));
+        values.sort_unstable_by_key(|(f, _)| Reverse(**f));
 
         let mut table = Table::new();
 
@@ -232,15 +259,15 @@ impl System {
         writeln!(buffer, "dimensions=2").expect("Error");
         writeln!(buffer, "size={}", self.elements.len()).expect("Error");
         let state = self
-            .element_signs
+            .system_state
             .iter()
             .map(|r| if *r { "1" } else { "0" })
             .fold(String::new(), |acc, part| acc + part);
         writeln!(buffer, "state={}", state).expect("Error");
         writeln!(buffer, "[parts]").expect("Error");
         for (id, row) in self.elements.iter().enumerate() {
-            let state = if self.element_signs[id] { "1" } else { "0" };
-            let factor = bool_to_one(self.element_signs[id]) * -1.0;
+            let state = if self.system_state[id] { "1" } else { "0" };
+            let factor = bool_to_one(self.system_state[id]) * -1.0;
             writeln!(
                 buffer,
                 "{}\t{:.16}\t{:.16}\t{:.16}\t{:.16}\t{:.16}\t{:.16}\t{}",
@@ -259,7 +286,7 @@ impl System {
         std::fs::write(filename, buffer).expect("Error on write to file");
     }
 
-    pub fn save_in_excel(&self, filename: impl AsRef<std::path::Path>) {
+    pub fn save_in_excel(&self, filename: impl AsRef<std::path::Path>, zero_if: f64) {
         use umya_spreadsheet::helper::coordinate::coordinate_from_index;
         use umya_spreadsheet::*;
 
@@ -269,7 +296,7 @@ impl System {
         const START_MATRIX_INDEX: CellRef = CellRef { row: 5, col: 1 };
         const START_MATRIX_VALUE: CellRef = CellRef { row: 6, col: 2 };
 
-        let size = self.element_signs.len() as u32;
+        let size = self.system_state.len() as u32;
 
         let mut book = new_file();
 
@@ -291,7 +318,7 @@ impl System {
             .get_cell_by_column_and_row_mut(&START_VALUE_CELL.col, &START_VALUE_CELL.row)
             .set_value("Value");
 
-        for (i, v) in self.element_signs.iter().enumerate() {
+        for (i, v) in self.system_state.iter().enumerate() {
             let i = i as u32;
 
             full.get_cell_by_column_and_row_mut(&(START_INDEX_CELL.col + 1 + i), &START_INDEX_CELL.row)
@@ -353,10 +380,11 @@ impl System {
                 let x_ref =
                     coordinate_from_index(&(START_VALUE_CELL.col + 1 + x), &START_VALUE_CELL.row);
 
+                let e = self.energy_matrix_default[y as usize][x as usize];
                 full.get_cell_by_column_and_row_mut(&xi, &yi)
                     .set_formula(format!(
                         "={y_ref} * {x_ref} * {}",
-                        self.energy_matrix_default[y as usize][x as usize]
+                        if e.abs() >= zero_if { e } else { 0.0 }
                     ));
 
                 if x >= y {
@@ -364,7 +392,7 @@ impl System {
                         .get_cell_by_column_and_row_mut(&xi, &yi)
                         .set_formula(format!(
                             "={y_ref} * {x_ref} * {}",
-                            self.energy_matrix_default[x as usize][y as usize]
+                            if e.abs() >= zero_if { e } else { 0.0 }
                         ));
                 }
             }
