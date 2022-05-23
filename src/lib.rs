@@ -19,6 +19,7 @@ use crate::algorithn_state::Step;
 use itertools::Itertools;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
+use crate::system::Vec2;
 
 pub fn perebor_gem(mut system: System) -> HashMap<(OrderedFloat<f64>, i32), (usize, Vec<BitVec>)> {
     let mut gem: HashMap<(OrderedFloat<f64>, i32), (usize, Vec<BitVec>)> = HashMap::new();
@@ -46,15 +47,94 @@ pub fn perebor_gem(mut system: System) -> HashMap<(OrderedFloat<f64>, i32), (usi
     gem
 }
 
+pub fn greedy(system: &mut System, states: &mut AlgorithmState) {
+    while !system.row_energies().iter().all(|x| x.is_sign_negative()) {
+        let index = system.row_energies()
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, x)| OrderedFloat(**x))
+            .unwrap().0;
+        system.reverse_spin(index);
+        states.save_step_state(system, StepKind::Greedy);
+    }
+}
+
+pub fn greedy_cluster(system: &mut System, states: &mut AlgorithmState, cluster: &HashMap<usize, usize>) {
+    while !system.row_energies()
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| cluster.contains_key(i))
+        .all(|(_, x)| x.is_sign_negative())
+    {
+        let index = system.row_energies()
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| cluster.contains_key(i))
+            .max_by_key(|(_, x)| OrderedFloat(**x))
+            .unwrap().0;
+        system.reverse_spin(index);
+        states.save_step_state(system, StepKind::Greedy);
+    }
+}
+
+pub fn gibrid_cluster(system: &mut System, states: &mut AlgorithmState, cluster: &[usize]) {
+    let cluster_map: HashMap<_, _> = cluster.iter().enumerate().map(|(i, i2)| (*i2, i)).collect();
+
+    let system_size = cluster.len();
+    greedy_cluster(system, states, &cluster_map);
+
+
+    let mut indexes: Vec<_> = cluster_map.keys().copied().collect();
+    indexes.shuffle(&mut thread_rng());
+    for i in &indexes {
+        let i = *i;
+        system.reverse_spin(i);
+
+        let sorted = system
+            .row_energies()
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(i, _)| cluster_map.contains_key(i))
+            .collect::<Vec<_>>()
+            .tap_mut(|v| v.sort_by_key(|(_, x)| OrderedFloat(*x)));
+
+
+        if sorted[0].0 == i {
+            system.reverse_spin(i);
+            continue;
+        }
+
+        // let sorted = system
+        //     .row_sum_energies()
+        //     .iter()
+        //     .copied()
+        //     .enumerate()
+        //     .collect::<Vec<_>>()
+        //     .tap_mut(|v| v.sort_by_key(|(_, x)| Reverse(OrderedFloat(*x))));
+        //
+        // if sorted[0].0 == i || sorted[0].1.is_sign_negative() {
+        //     system.reverse_spin(i);
+        //     continue;
+        // }
+
+        states.save_step_state(system, StepKind::Step2);
+        system.reverse_spin(sorted[0].0);
+        states.save_step_state(system, StepKind::Step2);
+
+        /*
+            Реализация шага 1 внутри шага 2
+        */
+        greedy_cluster(system, states, &cluster_map);
+    }
+}
+
 pub fn gibrid(system: &mut System, states: &mut AlgorithmState) {
     let system_size = system.system_size();
     /*
        Реализация шага 1 из разработанного алгоритма
     */
-    while !system.all_row_energies_negative() {
-        system.greedy_step();
-        states.save_step_state(system, StepKind::Greedy);
-    }
+    greedy(system, states);
 
     /*
        Реализация шага 2 из разработанного алгоритма
@@ -99,30 +179,8 @@ pub fn gibrid(system: &mut System, states: &mut AlgorithmState) {
         /*
             Реализация шага 1 внутри шага 2
         */
-        if !system.all_row_energies_negative() {
-            while !system.all_row_energies_negative() {
-                system.greedy_step();
-                states.save_step_state(system, StepKind::Greedy);
-            }
-        }
+        greedy(system, states);
     }
-
-    if states.minimal_state.energy < -0.392 {
-        println!("{} {:?}", states.minimal_state.energy, &indexes);
-    }
-
-    // for count in 1..system_size {
-    //     for i in 0..(system_size - count) {
-    //         system.reverse_spins(
-    //             (0..count).map(|j| if j % 11 == 0 { i + j } else { system_size - j })
-    //         );
-    //         while !system.all_row_energies_negative() {
-    //             system.greedy_step();
-    //             states.save_state(&system, StateActionKind::Greedy);
-    //         }
-    //         states.save_state(&system, StateActionKind::Step3)
-    //     }
-    // }
 }
 
 pub fn minimize_cells(system: &mut System, states: &mut AlgorithmState) {
@@ -240,4 +298,36 @@ pub fn draw_state(states: &AlgorithmState, dir_name: &str) {
     draw_steps(steps, StepKind::Step2, &BLUE);
     draw_steps(steps, StepKind::Minimize1, &MAGENTA);
     draw_steps(steps, StepKind::Minimize2, &CYAN);
+}
+
+pub fn export_csv(filepath: &str) -> (System, BitVec) {
+    let mut reader = csv::Reader::from_path(filepath).unwrap();
+    let mut states = BitVec::new();
+
+    let mut elements = Vec::new();
+    for result in reader.records() {
+        let record = result.unwrap();
+
+        let _id: u64 = record[0].parse().unwrap();
+        let x: f64 = record[1].parse().unwrap();
+        let y: f64 = record[2].parse().unwrap();
+        let _: f64 = record[3].parse().unwrap();
+        let mx: f64 = record[4].parse().unwrap();
+        let my: f64 = record[5].parse().unwrap();
+        let _: f64 = record[6].parse().unwrap();
+        let state: u8 = record[7].parse().unwrap();
+
+        let pos = Vec2::new(x, y);
+        let mut magn = Vec2::new(mx, my);
+        if state == 1 {
+            magn *= -1.0;
+            states.push(true)
+        } else {
+            states.push(false)
+        }
+
+        elements.push(Element::new(pos, magn));
+    }
+
+    (System::new(elements), states)
 }

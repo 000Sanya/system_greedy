@@ -3,6 +3,7 @@ use crate::Element;
 use bitvec::prelude::BitVec;
 use ordered_float::OrderedFloat;
 use std::fmt::Write;
+use ndarray::Array2;
 use umya_spreadsheet::OrientationValues::Default;
 
 pub type Vec2 = vek::Vec2<f64>;
@@ -15,6 +16,7 @@ pub struct CellRef {
 #[derive(Clone, Debug)]
 pub struct System {
     elements: Vec<Element>,
+    element_neighbors: Vec<Vec<(usize, OrderedFloat<f64>)>>,
     system_state: BitVec,
     energy_matrix: Vec<Vec<f64>>,
     energy_matrix_default: Vec<Vec<f64>>,
@@ -25,6 +27,20 @@ pub struct System {
 
 impl System {
     pub fn new(elements: Vec<Element>) -> Self {
+        let mut element_neighbors = Vec::with_capacity(elements.len());
+
+        for e1 in &elements {
+            let mut neighbors = Vec::with_capacity(elements.len());
+
+            for (i, e2) in elements.iter().enumerate() {
+                let distance = OrderedFloat(e1.pos.distance(e2.pos));
+                neighbors.push((i, distance));
+            }
+
+            neighbors.sort_by_key(|(_, d)| *d);
+            element_neighbors.push(neighbors);
+        }
+
         let mut energy_matrix = Vec::with_capacity(elements.len());
         let mut row_energies = Vec::with_capacity(elements.len());
         for elem in &elements {
@@ -48,6 +64,7 @@ impl System {
 
         Self {
             elements,
+            element_neighbors,
             system_state,
             energy_matrix,
             energy_matrix_default,
@@ -65,11 +82,13 @@ impl System {
         let spin_excess = plus as i32 - minus as i32;
         let energy = row_energies.iter().sum::<f64>();
         let elements = (0..default_matrix.len()).map(|_| Element::new(Vec2::zero(), Vec2::zero())).collect();
+        let element_neighbors = Vec::new();
         let energy_matrix = default_matrix.clone();
         let energy_matrix_default = default_matrix;
 
         Self {
             elements,
+            element_neighbors,
             system_state,
             energy_matrix,
             energy_matrix_default,
@@ -117,6 +136,25 @@ impl System {
 
     #[inline(always)]
     pub fn default_energy_matrix(&self) -> &Vec<Vec<f64>> { &self.energy_matrix_default }
+
+    #[inline(always)]
+    pub fn element_neighbors(&self) -> &Vec<Vec<(usize, OrderedFloat<f64>)>> {
+        &self.element_neighbors
+    }
+
+    #[inline(always)]
+    pub fn neighbors<'a>(&'a self, index: usize, radius: f64) -> impl Iterator<Item=(usize, OrderedFloat<f64>)> + 'a {
+        self.element_neighbors[index]
+            .iter()
+            .copied()
+            .take_while(move |(_, d)| d.0 <= radius)
+    }
+
+    #[inline(always)]
+    pub fn neighbors2<'a>(&'a self, index: usize, radius: f64) -> impl Iterator<Item=(usize, f64)> + 'a {
+        self.neighbors(index, radius)
+            .map(|(i, d)| (i, d.0))
+    }
 
     pub fn recalculate_spin_excess(&mut self) {
         let plus = self.system_state.count_ones();

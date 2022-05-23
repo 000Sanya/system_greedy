@@ -3,6 +3,7 @@ use crate::System;
 
 pub struct AlgorithmState {
     pub minimal_state: State,
+    pub new_minimal_state: bool,
     pub steps: Vec<Step>,
 }
 
@@ -36,6 +37,7 @@ impl AlgorithmState {
                 energy: f64::MAX,
                 spin_excess: 0
             },
+            new_minimal_state: false,
             steps: vec![],
         }
     }
@@ -51,7 +53,36 @@ impl AlgorithmState {
         };
         if self.minimal_state.energy > system.energy() {
             self.minimal_state = step.state.clone();
+            self.new_minimal_state = true;
         }
         self.steps.push(step);
+    }
+
+    pub fn save_step_state2(&mut self, system: &System, step_type: StepKind) {
+        let step = Step {
+            state: State {
+                state: system.system_state().clone(),
+                energy: system.energy(),
+                spin_excess: system.spin_excess(),
+            },
+            step_kind: step_type
+        };
+        if self.minimal_state.energy > system.energy() {
+            self.minimal_state = step.state.clone();
+            self.new_minimal_state = true;
+        }
+    }
+
+    pub fn clear_steps(&mut self) {
+        self.steps.clear();
+    }
+
+    pub fn consume_minimal_state(&mut self) -> Option<State> {
+        if self.new_minimal_state {
+            self.new_minimal_state = false;
+            Some(self.minimal_state.clone())
+        } else {
+            None
+        }
     }
 }
