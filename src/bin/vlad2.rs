@@ -163,22 +163,20 @@ fn main() {
 
             let mut algorithm_state = AlgorithmState::new();
 
-            for state in states {
-                system.set_spins(
-                    state.state.iter().enumerate().map(|(i, s)| (cluster[i], *s))
-                );
-                algorithm_state.save_step_state2(&system, StepKind::Minimize1);
+            system.set_spins(
+                states.last().unwrap().state.iter().enumerate().map(|(i, s)| (cluster[i], *s))
+            );
+            algorithm_state.save_step_state2(&system, StepKind::Minimize1);
 
-                if let Some(current_minimum) = algorithm_state.consume_minimal_state() {
-                    if current_minimum.energy <= curr_e {
-                        curr_e = current_minimum.energy;
-                        curr_state = Some(current_minimum.clone());
-                        println!("{}", curr_e);
-                        if curr_e < -1.55 {
-                            let mut system = system.clone();
-                            system.set_system_state(current_minimum.state.clone());
-                            system.save_system(format!("results/min_{}.mfsys", system.energy()));
-                        }
+            if let Some(current_minimum) = algorithm_state.consume_minimal_state() {
+                if current_minimum.energy <= curr_e {
+                    curr_e = current_minimum.energy;
+                    curr_state = Some(current_minimum.clone());
+                    println!("{}", curr_e);
+                    if curr_e < -1.55 {
+                        let mut system = system.clone();
+                        system.set_system_state(current_minimum.state.clone());
+                        system.save_system(format!("results/min_{}.mfsys", current_minimum.energy));
                     }
                 }
             }
@@ -210,7 +208,7 @@ fn main() {
             if current_minimum.energy <= curr_e {
                 curr_e = current_minimum.energy;
                 curr_state = Some(current_minimum.clone());
-                println!("gibrid {}", curr_e);
+                println!("gibrid2 {}", curr_e);
                 if curr_e < -1.55 {
                     let mut system = system.clone();
                     system.set_system_state(current_minimum.state.clone());

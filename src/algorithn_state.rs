@@ -86,7 +86,7 @@ impl AlgorithmState {
         if self.minimal_state.energy > system.energy() {
             self.minimal_state = step.state.clone();
             self.new_minimal_state = true;
-            system.save_system(format!("results/min_{}.mfsys", system.energy()));
+            // system.save_system(format!("results/min_{}.mfsys", system.energy()));
         }
     }
 
