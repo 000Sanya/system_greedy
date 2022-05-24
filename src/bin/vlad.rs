@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::collections::HashMap;
 use std::time::Instant;
 use bitvec::bitvec;
 use bitvec::prelude::BitVec;
@@ -6,11 +7,15 @@ use bitvec::prelude::Lsb0;
 use bitvec::view::BitView;
 use ordered_float::OrderedFloat;
 use rand::{Rng, thread_rng};
-use rayon::prelude::{ParallelBridge, ParallelIterator};
-use system_greedy::algorithn_state::{AlgorithmState, State, StepKind};
+use rayon::prelude::{IntoParallelIterator, ParallelBridge, ParallelIterator};
+use tap::Tap;
+use system_greedy::algorithn_state::{AlgorithmState, State, State2, StepKind};
 use system_greedy::generators::LatticeGenerator;
 use system_greedy::{gibrid_cluster, gibrid, export_csv};
+use system_greedy::element::Element;
+use system_greedy::perebor::perebor_states;
 use system_greedy::system::System;
+use system_greedy::system_part::get_part_from_system;
 
 fn grey_bitvec(g: BitVec) -> BitVec {
     let mut g1 = g.clone();
@@ -62,6 +67,46 @@ fn perebor(system: &System, cluster: &[usize]) -> State {
         .unwrap()
 }
 
+fn get_states(system: &System, radius: f64) -> (HashMap<Vec<Element>, Vec<State2>>, HashMap<usize, Vec<Element>>) {
+    let mut states_map = HashMap::new();
+    let mut identity_map = HashMap::new();
+
+    for i in 0..system.system_size() {
+        let neighbors: Vec<_> = system.neighbors2(i, radius).map(|(i, _)| i).collect();
+
+        let part = get_part_from_system(system, &neighbors);
+        if !states_map.contains_key(&part) {
+            println!("Perebor system for {}, states: {}", i, states_map.len());
+            let system = System::new(part.clone());
+            let states = perebor_states(&system);
+
+            let min = states.iter().min_by_key(|(s, _)| OrderedFloat(s.energy)).map(|(s, _)| s.energy).unwrap();
+            let diff = min.abs() * 2.0 * 0.2;
+
+            let states: Vec<_> = states
+                .into_par_iter()
+                .map(|states| {
+                    let mut v = Vec::with_capacity(2usize.pow(20));
+                    v.extend(
+                        states.1
+                            .into_iter()
+                            .filter(|state| (state.energy - min).abs() <= diff)
+                    );
+                    v
+                })
+                .reduce(
+                    || Vec::new(),
+                    |mut gv, v| gv.tap_mut(|gv| gv.extend(v))
+                );
+            states_map.insert(part.clone(), states);
+            println!("Stop perebor system for {}, states: {}", i, states_map.len());
+        }
+        identity_map.insert(i, part);
+    }
+
+    (states_map, identity_map)
+}
+
 fn main() {
     let cols = 2;
     let rows = 3;
@@ -79,48 +124,91 @@ fn main() {
     let mut prev_e;
 
     let mut curr_state = None;
-    //
-    let mut states = AlgorithmState::new();
-    gibrid(&mut system, &mut states);
+
+    let mut raduis = 0.0;
+    let rnd_count = 20;
+
+    while max <= rnd_count {
+        for i in 0..system.system_size() {
+            let count = system.neighbors(i, raduis).count();
+            min = min.min(count);
+            max = max.max(count)
+        }
+        raduis += 10.0;
+    }
+
+    dbg!(min);
+    dbg!(max);
+
+    let (states_map, identity_map) = get_states(&system, raduis);
+
+    {
+        let mut algorithm_state = AlgorithmState::new();
+        gibrid(&mut system, &mut algorithm_state);
+
+        system.set_system_state(algorithm_state.minimal_state.state);
+    }
 
     loop {
-        let mut raduis = 0.0;
-        let rnd_count = thread_rng().gen_range(10..=40);
-
-        loop {
-            for i in 0..system.system_size() {
-                let count = system.neighbors(i, raduis).count();
-                min = min.min(count);
-                max = max.max(count)
-            }
-
-            if max > rnd_count {
-                break
-            }
-
-            raduis += 10.0;
-        }
-
-        dbg!(min);
-        dbg!(max);
-
         prev_e = curr_e;
         for _ in 0..system.system_size() {
             let random = thread_rng().gen_range(0..system.system_size());
             let cluster: Vec<_> = system.neighbors(random, raduis).map(|(i, _)| i).collect();
 
-            let current_minimum = perebor(&system, &cluster);
-            system.set_system_state(current_minimum.state.clone());
+            let identity = &identity_map[&random];
+            let states = &states_map[identity];
 
-            if current_minimum.energy <= curr_e {
-                curr_e = current_minimum.energy;
-                curr_state = Some(current_minimum);
-                println!("{}", curr_e);
+            measure_time::print_time!("One perebor");
+
+            let mut algorithm_state = AlgorithmState::new();
+
+            for state in states {
+                system.set_spins(
+                    state.state.iter().enumerate().map(|(i, s)| (cluster[i], *s))
+                );
+                algorithm_state.save_step_state2(&system, StepKind::Minimize1);
+
+                if let Some(current_minimum) = algorithm_state.consume_minimal_state() {
+                    if current_minimum.energy <= curr_e {
+                        curr_e = current_minimum.energy;
+                        curr_state = Some(current_minimum);
+                        println!("{}", curr_e);
+                    }
+                }
+            }
+
+            gibrid(&mut system, &mut algorithm_state);
+
+            if let Some(current_minimum) = algorithm_state.consume_minimal_state() {
+                if current_minimum.energy <= curr_e {
+                    curr_e = current_minimum.energy;
+                    curr_state = Some(current_minimum);
+                    println!("gibrid {}", curr_e);
+                }
+            }
+
+            if let Some(state) = curr_state.as_ref() {
+                system.set_system_state(state.state.clone())
             }
         }
 
+        let mut algorithm_state = AlgorithmState::new();
+        gibrid(&mut system, &mut algorithm_state);
+
+        if let Some(current_minimum) = algorithm_state.consume_minimal_state() {
+            if current_minimum.energy <= curr_e {
+                curr_e = current_minimum.energy;
+                curr_state = Some(current_minimum);
+                println!("gibrid {}", curr_e);
+            }
+        }
+
+        if let Some(state) = curr_state.as_ref() {
+            system.set_system_state(state.state.clone())
+        }
+
         if (curr_e - prev_e).abs() <= 1e-8 {
-            break
+            break;
         }
     }
 

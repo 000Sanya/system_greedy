@@ -14,6 +14,22 @@ pub struct State {
     pub spin_excess: i32,
 }
 
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            state: Default::default(),
+            energy: f64::MAX,
+            spin_excess: 0
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct State2 {
+    pub state: BitVec,
+    pub energy: f64,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Step {
     pub state: State,
@@ -70,6 +86,7 @@ impl AlgorithmState {
         if self.minimal_state.energy > system.energy() {
             self.minimal_state = step.state.clone();
             self.new_minimal_state = true;
+            system.save_system(format!("results/min_{}.mfsys", system.energy()));
         }
     }
 

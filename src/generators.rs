@@ -61,10 +61,7 @@ impl LatticeGenerator {
 
                     elem.0 += Vec2::new(i as f64, j as f64) * 816.0;
 
-                    elements.push(Element {
-                        pos: elem.0,
-                        magn: elem.1,
-                    });
+                    elements.push(Element::new(elem.0,elem.1));
                 }
             }
         }

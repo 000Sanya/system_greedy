@@ -2,6 +2,8 @@ pub mod element;
 pub mod generators;
 pub mod system;
 pub mod algorithn_state;
+pub mod perebor;
+pub mod system_part;
 
 use crate::generators::LatticeGenerator;
 use bitvec::prelude::BitVec;
@@ -55,7 +57,7 @@ pub fn greedy(system: &mut System, states: &mut AlgorithmState) {
             .max_by_key(|(_, x)| OrderedFloat(**x))
             .unwrap().0;
         system.reverse_spin(index);
-        states.save_step_state(system, StepKind::Greedy);
+        states.save_step_state2(system, StepKind::Greedy);
     }
 }
 
@@ -172,9 +174,9 @@ pub fn gibrid(system: &mut System, states: &mut AlgorithmState) {
         //     continue;
         // }
 
-        states.save_step_state(system, StepKind::Step2);
+        states.save_step_state2(system, StepKind::Step2);
         system.reverse_spin(sorted[0].0);
-        states.save_step_state(system, StepKind::Step2);
+        states.save_step_state2(system, StepKind::Step2);
 
         /*
             Реализация шага 1 внутри шага 2

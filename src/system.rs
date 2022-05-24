@@ -33,7 +33,7 @@ impl System {
             let mut neighbors = Vec::with_capacity(elements.len());
 
             for (i, e2) in elements.iter().enumerate() {
-                let distance = OrderedFloat(e1.pos.distance(e2.pos));
+                let distance = e1.pos.distance(e2.pos);
                 neighbors.push((i, distance));
             }
 
@@ -156,6 +156,11 @@ impl System {
             .map(|(i, d)| (i, d.0))
     }
 
+    #[inline(always)]
+    pub fn elements(&self) -> &Vec<Element> {
+        &self.elements
+    }
+
     pub fn recalculate_spin_excess(&mut self) {
         let plus = self.system_state.count_ones();
         let minus = self.system_state.count_zeros();
@@ -175,6 +180,12 @@ impl System {
         self.energy = self.row_energies.iter().sum::<f64>();
     }
 
+    pub fn set_spin(&mut self, spin: usize, state: bool) {
+        if self.system_state[spin] != state {
+            self.reverse_spin(spin);
+        }
+    }
+
     pub fn reverse_spin(&mut self, spin: usize) {
         let new_spin = !self.system_state[spin];
         self.system_state.set(spin, new_spin);
@@ -192,6 +203,12 @@ impl System {
                 self.energy_matrix[spin][i] *= -1.0;
                 self.energy_matrix[i][spin] *= -1.0;
             }
+        }
+    }
+
+    pub fn set_spins(&mut self, spines: impl Iterator<Item=(usize, bool)>) {
+        for (spin, state) in spines {
+            self.set_spin(spin, state);
         }
     }
 
