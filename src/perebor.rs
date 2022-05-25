@@ -1,7 +1,7 @@
-use bitvec::prelude::{BitVec, Lsb0};
-use bitvec::view::BitView;
 use crate::algorithn_state::{State, State2};
 use crate::System;
+use bitvec::prelude::{BitVec, Lsb0};
+use bitvec::view::BitView;
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 
 pub struct StateSaver {
@@ -18,7 +18,10 @@ impl StateSaver {
     }
 
     pub fn save(&mut self, system: &System) {
-        if system.energy() < 0.0 && (self.minimal_state.energy - system.energy()).abs() <= (self.minimal_state.energy * 0.2).abs() {
+        if system.energy() < 0.0
+            && (self.minimal_state.energy - system.energy()).abs()
+                <= (self.minimal_state.energy * 0.2).abs()
+        {
             self.states.push(State2 {
                 state: system.system_state().clone(),
                 energy: system.energy(),
@@ -28,7 +31,7 @@ impl StateSaver {
             self.minimal_state = State {
                 state: system.system_state().clone(),
                 energy: system.energy(),
-                spin_excess: system.spin_excess()
+                spin_excess: system.spin_excess(),
             };
         }
     }
@@ -60,20 +63,21 @@ pub fn perebor_states(system: &System) -> Vec<(State, Vec<State2>)> {
     let block_size = state_count / thread_count;
     let remain = state_count % thread_count;
 
-    let ranges = (0..thread_count)
-        .map(|i| {
-            let start = i * block_size + i.min(remain);
-            let count = block_size + if i < remain { 1 } else { 0 };
-            start..start + count
-        });
+    let ranges = (0..thread_count).map(|i| {
+        let start = i * block_size + i.min(remain);
+        let count = block_size + if i < remain { 1 } else { 0 };
+        start..start + count
+    });
 
-    ranges.into_iter()
+    ranges
+        .into_iter()
         .par_bridge()
         .map(move |r| {
             let mut system = system.clone();
             let mut states = StateSaver::new(r.len());
             let start = r.start;
-            let bit_view = start.view_bits::<Lsb0>()
+            let bit_view = start
+                .view_bits::<Lsb0>()
                 .into_iter()
                 .take(system_size)
                 .collect();

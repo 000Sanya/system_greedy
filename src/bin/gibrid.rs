@@ -1,9 +1,6 @@
-use bitvec::vec::BitVec;
 use system_greedy::algorithn_state::AlgorithmState;
 use system_greedy::generators::LatticeGenerator;
-use system_greedy::{draw_state, gibrid, minimize_cells};
-use system_greedy::element::Element;
-use system_greedy::system::{System, Vec2};
+use system_greedy::{gibrid, minimize_cells};
 
 fn main() {
     let cols = 4;
@@ -14,8 +11,6 @@ fn main() {
     let mut states = AlgorithmState::new();
     // let (mut system, gs) = export_csv("results/trim1200.csv");
     // system.set_system_state(gs);
-
-    let mut system = system.clone();
 
     loop {
         for _ in 0..5 {
@@ -39,5 +34,3 @@ fn main() {
     }
     // draw_state(&states, &dir_name);
 }
-
-

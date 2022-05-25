@@ -1,32 +1,31 @@
+pub mod algorithn_state;
 pub mod element;
 pub mod generators;
-pub mod system;
-pub mod algorithn_state;
 pub mod perebor;
+pub mod system;
 pub mod system_part;
 
-use crate::generators::LatticeGenerator;
 use bitvec::prelude::BitVec;
 use element::Element;
 use ordered_float::OrderedFloat;
 use plotters::prelude::*;
-use rayon::prelude::*;
+
 use std::cmp::Reverse;
-use std::collections::{BTreeSet, HashMap, HashSet};
-use std::time::Instant;
+use std::collections::{BTreeSet, HashMap};
+
+use crate::algorithn_state::Step;
+use algorithn_state::{AlgorithmState, StepKind};
 use system::System;
 use tap::Tap;
-use algorithn_state::{AlgorithmState, StepKind};
-use crate::algorithn_state::Step;
-use itertools::Itertools;
+
+use crate::system::Vec2;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
-use crate::system::Vec2;
 
-pub fn perebor_gem(mut system: System) -> HashMap<(OrderedFloat<f64>, i32), (usize, Vec<BitVec>)> {
+pub fn perebor_gem(system: System) -> HashMap<(OrderedFloat<f64>, i32), (usize, Vec<BitVec>)> {
     let mut gem: HashMap<(OrderedFloat<f64>, i32), (usize, Vec<BitVec>)> = HashMap::new();
 
-    for state in 0..( 1 << system.system_size()) {
+    for state in 0..(1 << system.system_size()) {
         let mut system = system.clone();
 
         let mut system_state = system.system_state().clone();
@@ -51,29 +50,38 @@ pub fn perebor_gem(mut system: System) -> HashMap<(OrderedFloat<f64>, i32), (usi
 
 pub fn greedy(system: &mut System, states: &mut AlgorithmState) {
     while !system.row_energies().iter().all(|x| x.is_sign_negative()) {
-        let index = system.row_energies()
+        let index = system
+            .row_energies()
             .iter()
             .enumerate()
             .max_by_key(|(_, x)| OrderedFloat(**x))
-            .unwrap().0;
+            .unwrap()
+            .0;
         system.reverse_spin(index);
         states.save_step_state2(system, StepKind::Greedy);
     }
 }
 
-pub fn greedy_cluster(system: &mut System, states: &mut AlgorithmState, cluster: &HashMap<usize, usize>) {
-    while !system.row_energies()
+pub fn greedy_cluster(
+    system: &mut System,
+    states: &mut AlgorithmState,
+    cluster: &HashMap<usize, usize>,
+) {
+    while !system
+        .row_energies()
         .iter()
         .enumerate()
         .filter(|(i, _)| cluster.contains_key(i))
         .all(|(_, x)| x.is_sign_negative())
     {
-        let index = system.row_energies()
+        let index = system
+            .row_energies()
             .iter()
             .enumerate()
             .filter(|(i, _)| cluster.contains_key(i))
             .max_by_key(|(_, x)| OrderedFloat(**x))
-            .unwrap().0;
+            .unwrap()
+            .0;
         system.reverse_spin(index);
         states.save_step_state(system, StepKind::Greedy);
     }
@@ -82,9 +90,8 @@ pub fn greedy_cluster(system: &mut System, states: &mut AlgorithmState, cluster:
 pub fn gibrid_cluster(system: &mut System, states: &mut AlgorithmState, cluster: &[usize]) {
     let cluster_map: HashMap<_, _> = cluster.iter().enumerate().map(|(i, i2)| (*i2, i)).collect();
 
-    let system_size = cluster.len();
+    let _system_size = cluster.len();
     greedy_cluster(system, states, &cluster_map);
-
 
     let mut indexes: Vec<_> = cluster_map.keys().copied().collect();
     indexes.shuffle(&mut thread_rng());
@@ -100,7 +107,6 @@ pub fn gibrid_cluster(system: &mut System, states: &mut AlgorithmState, cluster:
             .filter(|(i, _)| cluster_map.contains_key(i))
             .collect::<Vec<_>>()
             .tap_mut(|v| v.sort_by_key(|(_, x)| OrderedFloat(*x)));
-
 
         if sorted[0].0 == i {
             system.reverse_spin(i);
@@ -202,7 +208,8 @@ pub fn minimize_cells(system: &mut System, states: &mut AlgorithmState) {
                 continue;
             }
 
-            hash_map.entry(OrderedFloat(e.abs()))
+            hash_map
+                .entry(OrderedFloat(e.abs()))
                 .and_modify(|cells| cells.push((x, y)))
                 .or_insert(Vec::new());
         }
@@ -255,7 +262,11 @@ pub fn minimize_cells(system: &mut System, states: &mut AlgorithmState) {
 }
 
 pub fn draw_state(states: &AlgorithmState, dir_name: &str) {
-    let AlgorithmState { minimal_state, steps, .. } = states;
+    let AlgorithmState {
+        minimal_state,
+        steps,
+        ..
+    } = states;
 
     let image_path = format!("{dir_name}/chart.png");
     let root_drawing_area = BitMapBackend::new(&image_path, (1024, 768)).into_drawing_area();
@@ -266,7 +277,10 @@ pub fn draw_state(states: &AlgorithmState, dir_name: &str) {
         .caption("Ход работы алгоритма", ("Arial", 40u32))
         .set_label_area_size(LabelAreaPosition::Left, 40u32)
         .set_label_area_size(LabelAreaPosition::Bottom, 40u32)
-        .build_cartesian_2d(0..steps.len(), (minimal_state.energy * 1.1)..((minimal_state.energy / 3.0).abs()))
+        .build_cartesian_2d(
+            0..steps.len(),
+            (minimal_state.energy * 1.1)..((minimal_state.energy / 3.0).abs()),
+        )
         .unwrap();
 
     ctx.configure_mesh()
@@ -276,13 +290,14 @@ pub fn draw_state(states: &AlgorithmState, dir_name: &str) {
         .draw()
         .unwrap();
 
-    ctx.draw_series(
-        LineSeries::new(
-            steps.iter().enumerate().map(|(i, step)| (i, step.state.energy)),
-            &GREEN,
-        )
-    )
-        .unwrap();
+    ctx.draw_series(LineSeries::new(
+        steps
+            .iter()
+            .enumerate()
+            .map(|(i, step)| (i, step.state.energy)),
+        &GREEN,
+    ))
+    .unwrap();
 
     let mut draw_steps = |steps: &[Step], step_kind: StepKind, color: &RGBColor| {
         ctx.draw_series(
@@ -293,7 +308,7 @@ pub fn draw_state(states: &AlgorithmState, dir_name: &str) {
                 .map(|(i, step)| (i, step.state.energy))
                 .map(|p| Circle::new(p, 2, color)),
         )
-            .unwrap();
+        .unwrap();
     };
 
     draw_steps(steps, StepKind::Greedy, &RED);

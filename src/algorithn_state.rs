@@ -1,5 +1,5 @@
-use bitvec::prelude::BitVec;
 use crate::System;
+use bitvec::prelude::BitVec;
 
 pub struct AlgorithmState {
     pub minimal_state: State,
@@ -19,7 +19,7 @@ impl Default for State {
         Self {
             state: Default::default(),
             energy: f64::MAX,
-            spin_excess: 0
+            spin_excess: 0,
         }
     }
 }
@@ -51,7 +51,7 @@ impl AlgorithmState {
             minimal_state: State {
                 state: Default::default(),
                 energy: f64::MAX,
-                spin_excess: 0
+                spin_excess: 0,
             },
             new_minimal_state: false,
             steps: vec![],
@@ -65,7 +65,7 @@ impl AlgorithmState {
                 energy: system.energy(),
                 spin_excess: system.spin_excess(),
             },
-            step_kind: step_type
+            step_kind: step_type,
         };
         if self.minimal_state.energy > system.energy() {
             self.minimal_state = step.state.clone();
@@ -81,10 +81,10 @@ impl AlgorithmState {
                 energy: system.energy(),
                 spin_excess: system.spin_excess(),
             },
-            step_kind: step_type
+            step_kind: step_type,
         };
         if self.minimal_state.energy > system.energy() {
-            self.minimal_state = step.state.clone();
+            self.minimal_state = step.state;
             self.new_minimal_state = true;
             // system.save_system(format!("results/min_{}.mfsys", system.energy()));
         }

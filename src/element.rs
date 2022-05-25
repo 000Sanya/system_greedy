@@ -1,6 +1,6 @@
-use std::hash::{Hash, Hasher};
-use ordered_float::OrderedFloat;
 use crate::system::Vec2;
+use ordered_float::OrderedFloat;
+use std::hash::Hash;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct Element {
@@ -11,8 +11,8 @@ pub struct Element {
 impl Element {
     pub fn new(pos: Vec2, magn: Vec2) -> Self {
         Self {
-            pos: pos.map(|x| OrderedFloat(x)),
-            magn: magn.map(|x| OrderedFloat(x)),
+            pos: pos.map(OrderedFloat),
+            magn: magn.map(OrderedFloat),
         }
     }
 

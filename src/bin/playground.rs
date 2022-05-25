@@ -1,8 +1,4 @@
-use std::iter::repeat;
-use bitvec::access::BitAccess;
-use bitvec::prelude::BitVec;
 use system_greedy::generators::LatticeGenerator;
-use system_greedy::system::System;
 
 fn main() {
     let cols = 2;

@@ -1,7 +1,7 @@
-use std::f64::consts::PI;
 use crate::system::Vec2;
 use crate::{Element, System};
 use num_traits::Zero;
+use std::f64::consts::PI;
 
 pub struct LatticeGenerator;
 
@@ -129,7 +129,13 @@ impl LatticeGenerator {
                     (0..=18)
                         .filter(|x| !(down && skip_if_down.contains(x)))
                         .filter(|x| *x != skip_if_right || right)
-                        .map(|i| Element::new(pos[i] + Vec2::new(0.0 + sqrt_3 * 3.0 * col as f64, 3.0 * row as f64), magn[i]))
+                        .map(|i| {
+                            Element::new(
+                                pos[i]
+                                    + Vec2::new(0.0 + sqrt_3 * 3.0 * col as f64, 3.0 * row as f64),
+                                magn[i],
+                            )
+                        }),
                 )
             }
         }
@@ -144,9 +150,18 @@ impl LatticeGenerator {
         let l = 300.0;
 
         let tr = [
-            (Vec2::new(a * phi_1.cos(), a * phi_1.sin()), Vec2::new(l * phi_1.cos(), l * phi_1.sin())),
-            (Vec2::new(a * phi_2.cos(), a * phi_2.sin()), Vec2::new(l * phi_2.cos(), l * phi_2.sin())),
-            (Vec2::new(a * phi_3.cos(), a * phi_3.sin()), Vec2::new(l * phi_3.cos(), l * phi_3.sin())),
+            (
+                Vec2::new(a * phi_1.cos(), a * phi_1.sin()),
+                Vec2::new(l * phi_1.cos(), l * phi_1.sin()),
+            ),
+            (
+                Vec2::new(a * phi_2.cos(), a * phi_2.sin()),
+                Vec2::new(l * phi_2.cos(), l * phi_2.sin()),
+            ),
+            (
+                Vec2::new(a * phi_3.cos(), a * phi_3.sin()),
+                Vec2::new(l * phi_3.cos(), l * phi_3.sin()),
+            ),
         ];
 
         let dx = b;
@@ -158,15 +173,13 @@ impl LatticeGenerator {
         for row in 0..rows {
             for col in 0..cols {
                 if row % 2 == 0 {
-                    elements.extend(
-                        tr.iter()
-                            .map(|(p, m)| Element::new(p + Vec2::new(dx * col as f64, dy * row as f64), *m))
-                    )
+                    elements.extend(tr.iter().map(|(p, m)| {
+                        Element::new(p + Vec2::new(dx * col as f64, dy * row as f64), *m)
+                    }))
                 } else {
-                    elements.extend(
-                        tr.iter()
-                            .map(|(p, m)| Element::new(p + Vec2::new(offset + dx * col as f64, dy * row as f64), *m))
-                    )
+                    elements.extend(tr.iter().map(|(p, m)| {
+                        Element::new(p + Vec2::new(offset + dx * col as f64, dy * row as f64), *m)
+                    }))
                 }
             }
         }
@@ -186,19 +199,19 @@ impl LatticeGenerator {
         let tr = [
             (
                 Vec2::new(-dx / 2., -dy / 2.),
-                Vec2::new(l * (betta / 2.).cos(), l * (betta / 2.).sin())
+                Vec2::new(l * (betta / 2.).cos(), l * (betta / 2.).sin()),
             ),
             (
                 Vec2::new(-dx / 2., dy / 2.),
-                Vec2::new(l * (betta / 2.).cos(), l * (-betta / 2.).sin())
+                Vec2::new(l * (betta / 2.).cos(), l * (-betta / 2.).sin()),
             ),
             (
                 Vec2::new(dx / 2., -dy / 2.),
-                Vec2::new(l * (betta / 2.).cos(), l * (-betta / 2.).sin())
+                Vec2::new(l * (betta / 2.).cos(), l * (-betta / 2.).sin()),
             ),
             (
                 Vec2::new(dx / 2., dy / 2.),
-                Vec2::new(l * (betta / 2.).cos(), l * (betta / 2.).sin())
+                Vec2::new(l * (betta / 2.).cos(), l * (betta / 2.).sin()),
             ),
         ];
 
@@ -207,21 +220,17 @@ impl LatticeGenerator {
         for row in 0..rows {
             for col in 0..cols {
                 if (row + col) % 2 == 0 {
-                    elements.extend(
-                        tr.iter()
-                            .map(|(p, m)| Element::new(p + Vec2::new(col as f64 * offset, row as f64 * offset), *m))
-                    )
+                    elements.extend(tr.iter().map(|(p, m)| {
+                        Element::new(p + Vec2::new(col as f64 * offset, row as f64 * offset), *m)
+                    }))
                 } else {
-                    elements.extend(
-                        tr.iter()
-                            .map(|(p, m)| {
-                                let mut p = *p;
-                                let mut m = *m;
-                                p.reverse();
-                                m.reverse();
-                                Element::new(p + Vec2::new(col as f64 * offset, row as f64 * offset), m)
-                            })
-                    )
+                    elements.extend(tr.iter().map(|(p, m)| {
+                        let mut p = *p;
+                        let mut m = *m;
+                        p.reverse();
+                        m.reverse();
+                        Element::new(p + Vec2::new(col as f64 * offset, row as f64 * offset), m)
+                    }))
                 }
             }
         }

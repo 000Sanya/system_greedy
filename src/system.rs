@@ -1,10 +1,8 @@
-use std::cmp::Reverse;
 use crate::Element;
 use bitvec::prelude::BitVec;
 use ordered_float::OrderedFloat;
+use std::cmp::Reverse;
 use std::fmt::Write;
-use ndarray::Array2;
-use umya_spreadsheet::OrientationValues::Default;
 
 pub type Vec2 = vek::Vec2<f64>;
 
@@ -81,7 +79,9 @@ impl System {
         let minus = system_state.count_zeros();
         let spin_excess = plus as i32 - minus as i32;
         let energy = row_energies.iter().sum::<f64>();
-        let elements = (0..default_matrix.len()).map(|_| Element::new(Vec2::zero(), Vec2::zero())).collect();
+        let elements = (0..default_matrix.len())
+            .map(|_| Element::new(Vec2::zero(), Vec2::zero()))
+            .collect();
         let element_neighbors = Vec::new();
         let energy_matrix = default_matrix.clone();
         let energy_matrix_default = default_matrix;
@@ -132,10 +132,14 @@ impl System {
     }
 
     #[inline(always)]
-    pub fn energy_matrix(&self) -> &Vec<Vec<f64>> { &self.energy_matrix }
+    pub fn energy_matrix(&self) -> &Vec<Vec<f64>> {
+        &self.energy_matrix
+    }
 
     #[inline(always)]
-    pub fn default_energy_matrix(&self) -> &Vec<Vec<f64>> { &self.energy_matrix_default }
+    pub fn default_energy_matrix(&self) -> &Vec<Vec<f64>> {
+        &self.energy_matrix_default
+    }
 
     #[inline(always)]
     pub fn element_neighbors(&self) -> &Vec<Vec<(usize, OrderedFloat<f64>)>> {
@@ -143,7 +147,11 @@ impl System {
     }
 
     #[inline(always)]
-    pub fn neighbors<'a>(&'a self, index: usize, radius: f64) -> impl Iterator<Item=(usize, OrderedFloat<f64>)> + 'a {
+    pub fn neighbors(
+        &self,
+        index: usize,
+        radius: f64,
+    ) -> impl Iterator<Item = (usize, OrderedFloat<f64>)> + '_ {
         self.element_neighbors[index]
             .iter()
             .copied()
@@ -151,9 +159,8 @@ impl System {
     }
 
     #[inline(always)]
-    pub fn neighbors2<'a>(&'a self, index: usize, radius: f64) -> impl Iterator<Item=(usize, f64)> + 'a {
-        self.neighbors(index, radius)
-            .map(|(i, d)| (i, d.0))
+    pub fn neighbors2(&self, index: usize, radius: f64) -> impl Iterator<Item = (usize, f64)> + '_ {
+        self.neighbors(index, radius).map(|(i, d)| (i, d.0))
     }
 
     #[inline(always)]
@@ -205,13 +212,13 @@ impl System {
         }
     }
 
-    pub fn set_spins(&mut self, spines: impl Iterator<Item=(usize, bool)>) {
+    pub fn set_spins(&mut self, spines: impl Iterator<Item = (usize, bool)>) {
         for (spin, state) in spines {
             self.set_spin(spin, state);
         }
     }
 
-    pub fn reverse_spins(&mut self, spines: impl Iterator<Item=usize>) {
+    pub fn reverse_spins(&mut self, spines: impl Iterator<Item = usize>) {
         for spin in spines {
             self.reverse_spin(spin)
         }
@@ -223,7 +230,8 @@ impl System {
             .iter()
             .enumerate()
             .max_by_key(|(_, x)| OrderedFloat(**x))
-            .unwrap().0;
+            .unwrap()
+            .0;
         self.reverse_spin(index);
     }
 
@@ -334,7 +342,7 @@ impl System {
                 0.0,
                 state
             )
-                .expect("Error");
+            .expect("Error");
         }
 
         std::fs::write(filename, buffer).expect("Error on write to file");
@@ -355,10 +363,10 @@ impl System {
         let mut book = new_file();
 
         let mut full = Worksheet::default();
-        full.set_title("Full");
+        full.set_name("Full");
 
         let mut diagonal = Worksheet::default();
-        diagonal.set_title("Diagonal");
+        diagonal.set_name("Diagonal");
 
         full.get_cell_by_column_and_row_mut(&START_INDEX_CELL.col, &START_INDEX_CELL.row)
             .set_value("Index");
@@ -375,17 +383,23 @@ impl System {
         for (i, v) in self.system_state.iter().enumerate() {
             let i = i as u32;
 
-            full.get_cell_by_column_and_row_mut(&(START_INDEX_CELL.col + 1 + i), &START_INDEX_CELL.row)
-                .set_value_from_u32(i as u32);
+            full.get_cell_by_column_and_row_mut(
+                &(START_INDEX_CELL.col + 1 + i),
+                &START_INDEX_CELL.row,
+            )
+            .set_value_from_u32(i as u32);
             diagonal
-                .get_cell_by_column_and_row_mut(&(START_INDEX_CELL.col + 1 + i), &START_INDEX_CELL.row)
+                .get_cell_by_column_and_row_mut(
+                    &(START_INDEX_CELL.col + 1 + i),
+                    &START_INDEX_CELL.row,
+                )
                 .set_value_from_u32(i as u32);
 
             full.get_cell_by_column_and_row_mut(
                 &(START_VALUE_CELL.col + 1 + i),
                 &START_VALUE_CELL.row,
             )
-                .set_value_from_i32(bool_to_one(*v) as i32);
+            .set_value_from_i32(bool_to_one(*v) as i32);
             diagonal
                 .get_cell_by_column_and_row_mut(
                     &(START_VALUE_CELL.col + 1 + i),
@@ -397,7 +411,7 @@ impl System {
                 &(START_MATRIX_INDEX.col + 1 + i),
                 &START_MATRIX_INDEX.row,
             )
-                .set_value_from_u32(i as u32);
+            .set_value_from_u32(i as u32);
             diagonal
                 .get_cell_by_column_and_row_mut(
                     &(START_MATRIX_INDEX.col + 1 + i),
@@ -409,7 +423,7 @@ impl System {
                 &START_MATRIX_INDEX.col,
                 &(START_MATRIX_INDEX.row + 1 + i),
             )
-                .set_value_from_u32(i as u32);
+            .set_value_from_u32(i as u32);
             diagonal
                 .get_cell_by_column_and_row_mut(
                     &START_MATRIX_INDEX.col,

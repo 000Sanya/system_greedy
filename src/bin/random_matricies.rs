@@ -1,31 +1,32 @@
-use std::collections::{BTreeSet, HashMap};
 use bitvec::prelude::BitVec;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
-use rand::prelude::SliceRandom;
-use rand::thread_rng;
+use std::collections::{BTreeSet, HashMap};
+
 use system_greedy::perebor_gem;
 use system_greedy::system::System;
 
 fn main() {
-    let mut default_matrix = vec![
-        vec![0.0, -4.0,  4.0, -4.0,  4.0],
-        vec![0.0,  0.0,  1.0, -1.0,  2.0],
-        vec![0.0,  0.0,  0.0,  2.0, -1.0],
-        vec![0.0,  0.0,  0.0,  0.0, -3.0],
-        vec![0.0,  0.0,  0.0,  0.0,  0.0],
+    let _default_matrix = vec![
+        vec![0.0, -4.0, 4.0, -4.0, 4.0],
+        vec![0.0, 0.0, 1.0, -1.0, 2.0],
+        vec![0.0, 0.0, 0.0, 2.0, -1.0],
+        vec![0.0, 0.0, 0.0, 0.0, -3.0],
+        vec![0.0, 0.0, 0.0, 0.0, 0.0],
     ];
 
-    let mut default_matrix = vec![
-        vec![ 0.0, -1.0, -1.0, -1.0, -1.0],
-        vec![-1.0,  0.0, -1.0, -1.0, -1.0],
-        vec![-1.0, -1.0,  0.0, -1.0, -1.0],
-        vec![-1.0, -1.0, -1.0,  0.0, -1.0],
-        vec![-1.0, -1.0, -1.0, -1.0,  0.0],
+    let default_matrix = vec![
+        vec![0.0, -1.0, -1.0, -1.0, -1.0],
+        vec![-1.0, 0.0, -1.0, -1.0, -1.0],
+        vec![-1.0, -1.0, 0.0, -1.0, -1.0],
+        vec![-1.0, -1.0, -1.0, 0.0, -1.0],
+        vec![-1.0, -1.0, -1.0, -1.0, 0.0],
     ];
 
     let size = default_matrix.len();
-    let indexes: Vec<_> = (0..size).flat_map(|y| ((y+1)..size).map(move |x| (y, x))).collect();
+    let indexes: Vec<_> = (0..size)
+        .flat_map(|y| ((y + 1)..size).map(move |x| (y, x)))
+        .collect();
     let count = indexes.len();
 
     let mut gem_sizes = Vec::new();
@@ -43,12 +44,12 @@ fn main() {
             let size = default_matrix.len();
 
             for y in 0..size {
-                for x in (y+1)..size {
+                for x in (y + 1)..size {
                     default_matrix[x][y] = default_matrix[y][x];
                 }
             }
 
-            let mut system = System::from_default_matrix(default_matrix.clone());
+            let system = System::from_default_matrix(default_matrix.clone());
             let gem = perebor_gem(system.clone());
             save_in_csv(&default_matrix, &gem);
 
@@ -63,7 +64,8 @@ fn main() {
             //     }
             // }
 
-            let (min_e, states) = gem.iter()
+            let (min_e, _states) = gem
+                .iter()
                 .min_by_key(|((e, _), _)| *e)
                 .map(|((e, _), (_, states))| (e, states))
                 .unwrap();
@@ -72,7 +74,8 @@ fn main() {
 
             // println!("min e: {:?}, {}", min_e, states[0]);
 
-            let (max_e, states) = gem.iter()
+            let (max_e, _states) = gem
+                .iter()
                 .max_by_key(|((e, _), _)| *e)
                 .map(|((e, _), (_, states))| (e, states))
                 .unwrap();
@@ -85,9 +88,9 @@ fn main() {
         }
     }
 
-    let gem_sizes: BTreeSet<_> = gem_sizes.into_iter().collect();
-    let min_es: BTreeSet<_> = min_es.into_iter().collect();
-    let max_es: BTreeSet<_> = max_es.into_iter().collect();
+    let _gem_sizes: BTreeSet<_> = gem_sizes.into_iter().collect();
+    let _min_es: BTreeSet<_> = min_es.into_iter().collect();
+    let _max_es: BTreeSet<_> = max_es.into_iter().collect();
     let min_max_es: BTreeSet<_> = min_max_es.into_iter().collect();
 
     for (c, min, max) in min_max_es {
@@ -95,7 +98,10 @@ fn main() {
     }
 }
 
-fn save_in_csv(default_matrix: &Vec<Vec<f64>>, gem: &HashMap<(OrderedFloat<f64>, i32), (usize, Vec<BitVec>)>) {
+fn save_in_csv(
+    default_matrix: &Vec<Vec<f64>>,
+    gem: &HashMap<(OrderedFloat<f64>, i32), (usize, Vec<BitVec>)>,
+) {
     use std::fs::File;
     use std::io::Write;
 
@@ -115,29 +121,49 @@ fn save_in_csv(default_matrix: &Vec<Vec<f64>>, gem: &HashMap<(OrderedFloat<f64>,
     let size = default_matrix.len();
     for y in 0..size {
         for x in 0..size {
-            write!(matrix_file, "{}", default_matrix[y][x]);
+            write!(matrix_file, "{}", default_matrix[y][x]).unwrap();
             if x < size - 1 {
-                write!(matrix_file, ",");
+                write!(matrix_file, ",").unwrap();
             }
         }
-        writeln!(matrix_file, "");
+        writeln!(matrix_file).unwrap();
     }
 
-    let mut gem_file  = File::create(&format!("{}/gem.csv", &dir)).unwrap();
+    let mut gem_file = File::create(&format!("{}/gem.csv", &dir)).unwrap();
 
-    let mut gem: Vec<_> = gem.into_iter().map(|((e, m), (g, states))| (e, m, g)).collect();
+    let mut gem: Vec<_> = gem.iter().map(|((e, m), (g, _states))| (e, m, g)).collect();
     gem.sort_by_key(|(e, m, _)| (*m, *e));
 
-    writeln!(gem_file, "M,E,G");
+    writeln!(gem_file, "M,E,G").unwrap();
     for (e, m, g) in &gem {
-        writeln!(gem_file, "{},{},{}", m, e, g);
+        writeln!(gem_file, "{},{},{}", m, e, g).unwrap();
     }
-    writeln!(gem_file, ",,{}", gem.iter().map(|(_, _, g)| **g).sum::<usize>());
+    writeln!(
+        gem_file,
+        ",,{}",
+        gem.iter().map(|(_, _, g)| **g).sum::<usize>()
+    )
+    .unwrap();
 
-    let mut stats_file  = File::create(&format!("{}/stats.csv", &dir)).unwrap();
-    let min_e = gem.iter().min_by_key(|(e, _, _)| *e).map(|(e, _, _)| e.0).unwrap();
-    let max_e = gem.iter().max_by_key(|(e, _, _)| *e).map(|(e, _, _)| e.0).unwrap();
+    let mut stats_file = File::create(&format!("{}/stats.csv", &dir)).unwrap();
+    let min_e = gem
+        .iter()
+        .min_by_key(|(e, _, _)| *e)
+        .map(|(e, _, _)| e.0)
+        .unwrap();
+    let max_e = gem
+        .iter()
+        .max_by_key(|(e, _, _)| *e)
+        .map(|(e, _, _)| e.0)
+        .unwrap();
 
-    writeln!(stats_file, "Min E,Max E,Sum");
-    writeln!(stats_file, "{},{},{}", min_e, max_e, min_e.abs() + max_e.abs());
+    writeln!(stats_file, "Min E,Max E,Sum").unwrap();
+    writeln!(
+        stats_file,
+        "{},{},{}",
+        min_e,
+        max_e,
+        min_e.abs() + max_e.abs()
+    )
+    .unwrap();
 }
