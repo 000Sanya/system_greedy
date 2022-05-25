@@ -108,13 +108,13 @@ fn get_states(system: &System, radius: f64) -> (HashMap<Vec<Element>, Vec<State2
 }
 
 fn main() {
-    let cols = 2;
-    let rows = 3;
+    let cols = 4;
+    let rows = 4;
     let c = 376.0;
 
     let steps = 3;
 
-    // let mut system = LatticeGenerator::cairo(472.0, 344.0, c, 300.0, cols, rows);
+    let mut system = LatticeGenerator::cairo(472.0, 344.0, c, 300.0, cols, rows);
     let (mut system, gs) = export_csv("input/trim1200.csv");
     dbg!(system.system_size());
 
@@ -150,21 +150,27 @@ fn main() {
         system.set_system_state(algorithm_state.minimal_state.state);
     }
 
+    let mut rng = thread_rng();
+
     loop {
         prev_e = curr_e;
         for _ in 0..system.system_size() {
-            let random = thread_rng().gen_range(0..system.system_size());
+            let random = rng.gen_range(0..system.system_size());
             let cluster: Vec<_> = system.neighbors(random, raduis).map(|(i, _)| i).collect();
 
             let identity = &identity_map[&random];
             let states = &states_map[identity];
 
-            measure_time::print_time!("One perebor");
+            if states.len() < 1 {
+                continue
+            }
+
+            measure_time::print_time!("All time");
 
             let mut algorithm_state = AlgorithmState::new();
 
             system.set_spins(
-                states.last().unwrap().state.iter().enumerate().map(|(i, s)| (cluster[i], *s))
+                states[rng.gen_range(0..states.len())].state.iter().enumerate().map(|(i, s)| (cluster[i], *s))
             );
             algorithm_state.save_step_state2(&system, StepKind::Minimize1);
 
@@ -181,7 +187,10 @@ fn main() {
                 }
             }
 
-            gibrid(&mut system, &mut algorithm_state);
+            {
+                measure_time::print_time!("Gibrid time");
+                gibrid(&mut system, &mut algorithm_state);
+            }
 
             if let Some(current_minimum) = algorithm_state.consume_minimal_state() {
                 if current_minimum.energy <= curr_e {
@@ -220,6 +229,8 @@ fn main() {
         if let Some(state) = curr_state.as_ref() {
             system.set_system_state(state.state.clone())
         }
+
+        println!("tick");
 
         if (curr_e - prev_e).abs() <= 1e-8 {
             break;

@@ -147,35 +147,35 @@ pub fn gibrid(system: &mut System, states: &mut AlgorithmState) {
         let i = *i;
         system.reverse_spin(i);
 
-        let sorted = system
+        let elem = system
             .row_energies()
             .iter()
             .copied()
             .enumerate()
-            .collect::<Vec<_>>()
-            .tap_mut(|v| v.sort_by_key(|(_, x)| OrderedFloat(*x)));
+            .min_by_key(|(_, e)| OrderedFloat(*e))
+            .unwrap();
 
-
-        if sorted[0].0 == i {
+        if elem.0 == i {
             system.reverse_spin(i);
             continue;
         }
 
-        // let sorted = system
-        //     .row_sum_energies()
+        // let elem = system
+        //     .row_energies()
         //     .iter()
         //     .copied()
         //     .enumerate()
-        //     .collect::<Vec<_>>()
-        //     .tap_mut(|v| v.sort_by_key(|(_, x)| Reverse(OrderedFloat(*x))));
+        //     .max_by_key(|(_, e)| OrderedFloat(*e))
+        //     .unwrap();
         //
-        // if sorted[0].0 == i || sorted[0].1.is_sign_negative() {
+        //
+        // if elem.0 == i || elem.1.is_sign_negative() {
         //     system.reverse_spin(i);
         //     continue;
         // }
 
         states.save_step_state2(system, StepKind::Step2);
-        system.reverse_spin(sorted[0].0);
+        system.reverse_spin(elem.0);
         states.save_step_state2(system, StepKind::Step2);
 
         /*

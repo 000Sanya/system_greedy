@@ -195,14 +195,13 @@ impl System {
         }
 
         for i in 0..self.system_size() {
-            if i != spin {
-                self.row_energies[spin] -= 2.0 * self.energy_matrix[spin][i];
-                self.row_energies[i] -= 2.0 * self.energy_matrix[spin][i];
-                self.energy -= 4.0 * self.energy_matrix[spin][i];
+            let cell_energy = self.energy_matrix[spin][i];
+            self.row_energies[spin] -= 2.0 * cell_energy;
+            self.row_energies[i] -= 2.0 * cell_energy;
+            self.energy -= 4.0 * cell_energy;
 
-                self.energy_matrix[spin][i] *= -1.0;
-                self.energy_matrix[i][spin] *= -1.0;
-            }
+            self.energy_matrix[spin][i] *= -1.0;
+            self.energy_matrix[i][spin] *= -1.0;
         }
     }
 
