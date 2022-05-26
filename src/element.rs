@@ -1,6 +1,5 @@
 use crate::system::Vec2;
 use ordered_float::OrderedFloat;
-use std::hash::Hash;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct Element {

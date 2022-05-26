@@ -1,9 +1,10 @@
-pub mod algorithn_state;
 pub mod element;
 pub mod generators;
 pub mod perebor;
 pub mod system;
 pub mod system_part;
+pub mod utils;
+pub mod runner;
 
 use bitvec::prelude::BitVec;
 use element::Element;
@@ -12,43 +13,15 @@ use plotters::prelude::*;
 
 use std::cmp::Reverse;
 use std::collections::{BTreeSet, HashMap};
-
-use crate::algorithn_state::Step;
-use algorithn_state::{AlgorithmState, StepKind};
 use system::System;
 use tap::Tap;
 
 use crate::system::Vec2;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
+use crate::runner::StateRegisterer;
 
-pub fn perebor_gem(system: System) -> HashMap<(OrderedFloat<f64>, i32), (usize, Vec<BitVec>)> {
-    let mut gem: HashMap<(OrderedFloat<f64>, i32), (usize, Vec<BitVec>)> = HashMap::new();
-
-    for state in 0..(1 << system.system_size()) {
-        let mut system = system.clone();
-
-        let mut system_state = system.system_state().clone();
-        for b in 0..system.system_size() {
-            system_state.set(b, state >> b & 1 == 1);
-        }
-        system.set_system_state(system_state);
-
-        let e = system.energy();
-        let m = system.spin_excess();
-
-        gem.entry((OrderedFloat(e), m))
-            .and_modify(|(g, states)| {
-                *g += 1;
-                states.push(system.system_state().clone())
-            })
-            .or_insert((1usize, vec![system.system_state().clone()]));
-    }
-
-    gem
-}
-
-pub fn greedy(system: &mut System, states: &mut AlgorithmState) {
+pub fn greedy(system: &mut System, registerer: &impl StateRegisterer) {
     while !system.row_energies().iter().all(|x| x.is_sign_negative()) {
         let index = system
             .row_energies()
@@ -58,91 +31,16 @@ pub fn greedy(system: &mut System, states: &mut AlgorithmState) {
             .unwrap()
             .0;
         system.reverse_spin(index);
-        states.save_step_state2(system, StepKind::Greedy);
+        registerer.register(system);
     }
 }
 
-pub fn greedy_cluster(
-    system: &mut System,
-    states: &mut AlgorithmState,
-    cluster: &HashMap<usize, usize>,
-) {
-    while !system
-        .row_energies()
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| cluster.contains_key(i))
-        .all(|(_, x)| x.is_sign_negative())
-    {
-        let index = system
-            .row_energies()
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| cluster.contains_key(i))
-            .max_by_key(|(_, x)| OrderedFloat(**x))
-            .unwrap()
-            .0;
-        system.reverse_spin(index);
-        states.save_step_state(system, StepKind::Greedy);
-    }
-}
-
-pub fn gibrid_cluster(system: &mut System, states: &mut AlgorithmState, cluster: &[usize]) {
-    let cluster_map: HashMap<_, _> = cluster.iter().enumerate().map(|(i, i2)| (*i2, i)).collect();
-
-    let _system_size = cluster.len();
-    greedy_cluster(system, states, &cluster_map);
-
-    let mut indexes: Vec<_> = cluster_map.keys().copied().collect();
-    indexes.shuffle(&mut thread_rng());
-    for i in &indexes {
-        let i = *i;
-        system.reverse_spin(i);
-
-        let sorted = system
-            .row_energies()
-            .iter()
-            .copied()
-            .enumerate()
-            .filter(|(i, _)| cluster_map.contains_key(i))
-            .collect::<Vec<_>>()
-            .tap_mut(|v| v.sort_by_key(|(_, x)| OrderedFloat(*x)));
-
-        if sorted[0].0 == i {
-            system.reverse_spin(i);
-            continue;
-        }
-
-        // let sorted = system
-        //     .row_sum_energies()
-        //     .iter()
-        //     .copied()
-        //     .enumerate()
-        //     .collect::<Vec<_>>()
-        //     .tap_mut(|v| v.sort_by_key(|(_, x)| Reverse(OrderedFloat(*x))));
-        //
-        // if sorted[0].0 == i || sorted[0].1.is_sign_negative() {
-        //     system.reverse_spin(i);
-        //     continue;
-        // }
-
-        states.save_step_state(system, StepKind::Step2);
-        system.reverse_spin(sorted[0].0);
-        states.save_step_state(system, StepKind::Step2);
-
-        /*
-            Реализация шага 1 внутри шага 2
-        */
-        greedy_cluster(system, states, &cluster_map);
-    }
-}
-
-pub fn gibrid(system: &mut System, states: &mut AlgorithmState) {
+pub fn gibrid(system: &mut System, registerer: &impl StateRegisterer) {
     let system_size = system.system_size();
     /*
        Реализация шага 1 из разработанного алгоритма
     */
-    greedy(system, states);
+    greedy(system, registerer);
 
     /*
        Реализация шага 2 из разработанного алгоритма
@@ -180,18 +78,19 @@ pub fn gibrid(system: &mut System, states: &mut AlgorithmState) {
         //     continue;
         // }
 
-        states.save_step_state2(system, StepKind::Step2);
+        registerer.register(system);
+
         system.reverse_spin(elem.0);
-        states.save_step_state2(system, StepKind::Step2);
+        registerer.register(system);
 
         /*
             Реализация шага 1 внутри шага 2
         */
-        greedy(system, states);
+        greedy(system, registerer);
     }
 }
 
-pub fn minimize_cells(system: &mut System, states: &mut AlgorithmState) {
+pub fn minimize_cells(system: &mut System, registerer: &impl StateRegisterer) {
     let mut hash_map: HashMap<_, Vec<(usize, usize)>> = HashMap::new();
 
     let round = |x: f64| (x * 1_0000000000.0).round() / 1_0000000000.0;
@@ -245,7 +144,7 @@ pub fn minimize_cells(system: &mut System, states: &mut AlgorithmState) {
                         system.reverse_spin(*y)
                     }
 
-                    states.save_step_state(system, StepKind::Minimize1);
+                    registerer.register(system);
                 }
             } else {
                 let e1 = system.energy();
@@ -254,70 +153,14 @@ pub fn minimize_cells(system: &mut System, states: &mut AlgorithmState) {
                 if e1 < system.energy() {
                     system.reverse_spins([x, y].into_iter().copied());
                 } else {
-                    states.save_step_state(system, StepKind::Minimize2);
+                    registerer.register(system);
                 }
             }
         }
     }
 }
 
-pub fn draw_state(states: &AlgorithmState, dir_name: &str) {
-    let AlgorithmState {
-        minimal_state,
-        steps,
-        ..
-    } = states;
-
-    let image_path = format!("{dir_name}/chart.png");
-    let root_drawing_area = BitMapBackend::new(&image_path, (1024, 768)).into_drawing_area();
-
-    root_drawing_area.fill(&WHITE).unwrap();
-
-    let mut ctx = ChartBuilder::on(&root_drawing_area)
-        .caption("Ход работы алгоритма", ("Arial", 40u32))
-        .set_label_area_size(LabelAreaPosition::Left, 40u32)
-        .set_label_area_size(LabelAreaPosition::Bottom, 40u32)
-        .build_cartesian_2d(
-            0..steps.len(),
-            (minimal_state.energy * 1.1)..((minimal_state.energy / 3.0).abs()),
-        )
-        .unwrap();
-
-    ctx.configure_mesh()
-        .y_desc("Энергия")
-        .x_desc("Номер переворота")
-        .axis_desc_style(("sans-serif", 30))
-        .draw()
-        .unwrap();
-
-    ctx.draw_series(LineSeries::new(
-        steps
-            .iter()
-            .enumerate()
-            .map(|(i, step)| (i, step.state.energy)),
-        &GREEN,
-    ))
-    .unwrap();
-
-    let mut draw_steps = |steps: &[Step], step_kind: StepKind, color: &RGBColor| {
-        ctx.draw_series(
-            steps
-                .iter()
-                .enumerate()
-                .filter(|(_, step)| step.step_kind == step_kind)
-                .map(|(i, step)| (i, step.state.energy))
-                .map(|p| Circle::new(p, 2, color)),
-        )
-        .unwrap();
-    };
-
-    draw_steps(steps, StepKind::Greedy, &RED);
-    draw_steps(steps, StepKind::Step2, &BLUE);
-    draw_steps(steps, StepKind::Minimize1, &MAGENTA);
-    draw_steps(steps, StepKind::Minimize2, &CYAN);
-}
-
-pub fn export_csv(filepath: &str) -> (System, BitVec) {
+pub fn import_csv(filepath: &str) -> (System, BitVec) {
     let mut reader = csv::Reader::from_path(filepath).unwrap();
     let mut states = BitVec::new();
 

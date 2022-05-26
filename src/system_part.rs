@@ -11,9 +11,7 @@ pub fn get_part_from_system(system: &System, elements: &[usize]) -> Vec<Element>
         .collect();
 
     let min_x = elements.iter().min_by_key(|e| e.pos.x).unwrap();
-
     let min_y = elements.iter().min_by_key(|e| e.pos.y).unwrap();
-
     let offset = vek::Vec2::new(min_x.pos.x, min_y.pos.y);
 
     elements.iter_mut().for_each(|e| e.pos -= offset);
