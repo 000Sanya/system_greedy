@@ -98,7 +98,7 @@ pub fn perebor_cluster(system: &System, cluster: &[usize]) -> State {
 }
 
 pub fn perebor_states(system: &System) -> Vec<(State, Vec<State>)> {
-    let system_size = system.system_size();
+    let system_size = system.size();
     let thread_count = rayon::current_num_threads();
     let state_count = 2usize.pow(system_size as u32);
     let block_size = state_count / thread_count;
@@ -134,4 +134,66 @@ pub fn perebor_states(system: &System) -> Vec<(State, Vec<State>)> {
             (states.minimal_state, states.states)
         })
         .collect()
+}
+
+pub fn perebor_one_thread(system: &mut System) -> State {
+    let size = system.size();
+    let mut registerer = StateRegistererInner::new();
+
+    registerer.register(system);
+    let states_count = 2usize.pow(size as u32);
+
+    for i in 1..states_count {
+        let spin = i.trailing_zeros();
+        system.reverse_spin(spin as usize);
+        registerer.register(system);
+    }
+
+    registerer.minimal_state().unwrap()
+}
+
+fn perebor(system: &System, cluster: &[usize]) -> State {
+    let thread_count = rayon::current_num_threads();
+    let state_count = 2usize.pow(cluster.len() as u32);
+    let block_size = state_count / thread_count;
+    let remain = state_count % thread_count;
+
+    let ranges = (0..thread_count).map(|i| {
+        let start = i * block_size + i.min(remain);
+        let count = block_size + if i < remain { 1 } else { 0 };
+        start..start + count
+    });
+
+    ranges
+        .into_iter()
+        .par_bridge()
+        .map(move |r| {
+            let mut system = system.clone();
+            let mut registerer = StateRegistererInner::new();
+            let start = r.start;
+            let bit_view = start
+                .view_bits::<Lsb0>()
+                .into_iter()
+                .take(cluster.len())
+                .collect();
+            let bit_view = grey_bitvec(bit_view);
+            let mut state = system.system_state().clone();
+            bit_view
+                .into_iter()
+                .take(cluster.len())
+                .enumerate()
+                .for_each(|(i, s)| state.set(cluster[i], s));
+            system.set_system_state(state);
+            registerer.register(&system);
+
+            for i in r.skip(1) {
+                let index = i.trailing_zeros();
+                system.reverse_spin(cluster[index as usize]);
+                registerer.register(&system);
+            }
+
+            registerer.minimal_state().unwrap()
+        })
+        .min_by_key(|state| OrderedFloat(state.energy))
+        .unwrap()
 }

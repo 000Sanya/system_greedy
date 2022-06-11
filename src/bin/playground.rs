@@ -1,17 +1,20 @@
+use std::cell::RefCell;
+use plotters::prelude::{BitMapBackend, EmptyElement, IntoDrawingArea, RED};
 use system_greedy::generators::LatticeGenerator;
+use system_greedy::greedy;
+use system_greedy::runner::{RefCellStateRegisterer, StateRegistererInner};
+use system_greedy::system::Vec2;
+use system_greedy::utils::generate_arrow;
 
 fn main() {
-    let cols = 2;
-    let rows = 2;
-    // let c = 376.0;
-    //
-    // let mut system = LatticeGenerator::cairo(472.0, 344.0, c, 300.0, cols, rows);
-    // minimize_by_best_state(&mut system);
+    let mut system = LatticeGenerator::trimer(450. / 2., 700., 20, 20);
 
-    // let b = 600.0;
-    // let system = LatticeGenerator::trimer(450.0 / 2.0, b, rows, cols);
-    // system.save_system("results/trimer.mfsys");
+    for i in (0..system.size()).filter(|x| x % 3 != 1) {
+        system.reverse_spin(i);
+    }
 
-    let system = LatticeGenerator::wtf(700., rows, cols);
-    system.save_system("results/wtf.mfsys");
+    let mut registerer = RefCellStateRegisterer(RefCell::new(StateRegistererInner::new()));
+    greedy(&mut system, &mut registerer);
+
+    system.save_mfsys("results/replicate_2.mfsys");
 }

@@ -6,19 +6,19 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-vek = "0.15.4"
-ndarray = "0.15.4"
+vek = "0.15"
 bitvec = "1"
-num-traits = "0.2.14"
+num-traits = "0.2"
 tap = "1"
 plotters = "0.3"
 rayon = "1"
-prettytable-rs = "^0.8"
-umya-spreadsheet = "0.7.0"
-anyhow = "1.0"
+anyhow = "1"
 ordered-float = "2"
-approx = "0.5.1"
-itertools = "0.10.3"
-rand = "0.8.5"
-csv = "1.1"
+approx = "0.5"
+rand = "0.8"
 measure_time = "0.8"
+image = "0.24"
+iced = { version = "0.4", default-features = false, features = ["glow", "canvas", "tokio"] }
+quadtree-f32 = "0.4"
+native-dialog = { version = "0.6", features = ["windows_dpi_awareness", "windows_visual_styles"] }
+mpi = { git = "https://github.com/rsmpi/rsmpi.git", default-features = false }

@@ -15,6 +15,7 @@ impl Element {
         }
     }
 
+    #[inline(always)]
     pub fn energy_with(&self, element: &Element) -> f64 {
         let pij = self.pos.map(|x| x.0) - element.pos.map(|x| x.0);
 

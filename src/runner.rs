@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::sync::Mutex;
 use bitvec::vec::BitVec;
+use num_traits::Zero;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use crate::System;
 
@@ -41,7 +42,6 @@ impl StateRegistererInner {
                 state: system.system_state().clone(),
             });
             self.is_changed = true;
-            dbg!(system.energy());
         }
     }
 
@@ -68,7 +68,7 @@ pub trait StateRegisterer {
     fn minimal_state(&self) -> Option<State>;
 }
 
-pub struct RefCellStateRegisterer(RefCell<StateRegistererInner>);
+pub struct RefCellStateRegisterer(pub RefCell<StateRegistererInner>);
 
 impl StateRegisterer for RefCellStateRegisterer {
     fn register(&self, system: &System) {
@@ -80,7 +80,7 @@ impl StateRegisterer for RefCellStateRegisterer {
     }
 }
 
-pub struct MutexStateRegisterer(Mutex<StateRegistererInner>);
+pub struct MutexStateRegisterer(pub Mutex<StateRegistererInner>);
 
 impl StateRegisterer for MutexStateRegisterer {
     fn register(&self, system: &System) {
@@ -92,15 +92,51 @@ impl StateRegisterer for MutexStateRegisterer {
     }
 }
 
-pub fn runner_one_thread<F: FnMut(&mut System, &RefCellStateRegisterer)>(mut system: System, lattice_name: &str, mut f: F) {
+pub trait AlgorithmState {
+    fn after_step(&mut self);
+
+    fn after_step_for_system<SR: StateRegisterer>(&self, system: &mut System, registerer: &SR);
+}
+
+impl AlgorithmState for () {
+    #[inline(always)]
+    fn after_step(&mut self) {}
+
+    #[inline(always)]
+    fn after_step_for_system<SR: StateRegisterer>(&self, _system: &mut System, _registerer: &SR) {}
+}
+
+pub struct Replicate;
+
+impl AlgorithmState for Replicate {
+    #[inline(always)]
+    fn after_step(&mut self) {}
+
+    fn after_step_for_system<SR: StateRegisterer>(&self, system: &mut System, registerer: &SR) {
+        if let Some(state) = registerer.minimal_state() {
+            system.set_system_state(state.state);
+        }
+    }
+}
+
+pub fn runner_one_thread<S: AlgorithmState, F: FnMut(&mut System, &RefCellStateRegisterer, &S)>(
+    mut system: System,
+    max_steps: usize,
+    mut algorithm_state: S,
+    mut f: F,
+) -> State {
     let mut state_register = RefCellStateRegisterer(RefCell::new(StateRegistererInner::new()));
     let mut steps = 0;
 
-    measure_time::print_time!("All");
-    while !state_register.0.borrow().diff_between_mins(1e-8) || steps < 10 {
-        measure_time::print_time!("One step");
+    while !state_register.0.borrow().diff_between_mins(1e-8) {
+        if steps >= max_steps {
+            break;
+        }
 
-        f(&mut system, &state_register);
+        f(&mut system, &state_register, &algorithm_state);
+
+        algorithm_state.after_step();
+        algorithm_state.after_step_for_system(&mut system, &state_register);
 
         if state_register.0.borrow_mut().check_if_changed() {
             steps = 0;
@@ -109,40 +145,49 @@ pub fn runner_one_thread<F: FnMut(&mut System, &RefCellStateRegisterer)>(mut sys
         }
     }
 
-    system.set_system_state(state_register.minimal_state().unwrap().state);
-    system.save_system(
-        &format!("results/minimal_{}_{}.mfsys", lattice_name, system.system_size())
-    );
+    state_register.minimal_state().unwrap()
 }
 
-pub fn runner_multi_thread<F: Fn(&mut System, &MutexStateRegisterer) + Sync + Send>(mut system: System, lattice_name: &str, thread_count: usize, mut f: F) {
+pub fn runner_multi_thread<S: AlgorithmState + Sync, F: Fn(&mut System, &MutexStateRegisterer, &S) + Sync + Send>(
+    mut system: System,
+    mut algorithm_state: S,
+    max_steps: usize,
+    thread_count: usize,
+    mut f: F,
+) -> State {
     let mut state_register = MutexStateRegisterer(Mutex::new(StateRegistererInner::new()));
     let mut steps = 0;
-
-    measure_time::print_time!("All");
+    let mut all_steps = 0;
 
     let mut systems = vec![system.clone(); thread_count];
-    while !state_register.0.lock().unwrap().diff_between_mins(1e-8) || steps < 10 {
-        measure_time::print_time!("One step");
+    while !state_register.0.lock().unwrap().diff_between_mins(1e-8) {
+
+        if steps >= max_steps {
+            break;
+        }
 
         systems = systems
             .into_par_iter()
             .map(|mut system| {
-                f(&mut system, &state_register);
+                f(&mut system, &state_register, &algorithm_state);
                 system
             })
             .collect();
+
+        algorithm_state.after_step();
+        for system in &mut systems {
+            algorithm_state.after_step_for_system(system, &state_register);
+        }
 
         if state_register.0.lock().unwrap().check_if_changed() {
             steps = 0;
         } else {
             steps += 1;
         }
+
+        all_steps += 1;
     }
 
-    system.set_system_state(state_register.minimal_state().unwrap().state);
-    system.save_system(
-        &format!("results/minimal_{}_{}.mfsys", lattice_name, system.system_size())
-    );
+    state_register.minimal_state().unwrap()
 }
 
