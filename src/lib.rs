@@ -147,8 +147,16 @@ pub fn prepare_state(system: &System) -> GibridState {
 pub fn gibrid2(system: &mut System, registerer: &impl StateRegisterer, state: &GibridState) {
     let GibridState { states_map, identity_map, radius } = state;
 
+    let size = system.size();
+    let size10 = size / 10;
+
     let mut rng = thread_rng();
-    for _ in 0..system.size() {
+    for step in 0..system.size() {
+
+        if (step + 1) % size10 == 0 {
+            println!("Step {} / {}", step + 1, size);
+        }
+
         let random = rng.gen_range(0..system.size());
         let cluster: Vec<_> = system.neighbors(random, *radius).map(|(i, _)| i).collect();
 

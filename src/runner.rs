@@ -1,5 +1,6 @@
 use std::cell::RefCell;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use bitvec::vec::BitVec;
 use num_traits::Zero;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
@@ -155,12 +156,22 @@ pub fn runner_multi_thread<S: AlgorithmState + Sync, F: Fn(&mut System, &MutexSt
     thread_count: usize,
     mut f: F,
 ) -> State {
+    let is_work = Arc::new(AtomicBool::new(true));
+
+    let isw = is_work.clone();
+
+    println!("Setup ctrl-c");
+    ctrlc::set_handler(move || {
+        println!("Wait step for closing");
+        isw.store(false, Ordering::SeqCst);
+    }).unwrap();
+
     let mut state_register = MutexStateRegisterer(Mutex::new(StateRegistererInner::new()));
     let mut steps = 0;
     let mut all_steps = 0;
 
     let mut systems = vec![system.clone(); thread_count];
-    while !state_register.0.lock().unwrap().diff_between_mins(1e-8) {
+    while !state_register.0.lock().unwrap().diff_between_mins(1e-8) && is_work.load(Ordering::SeqCst) {
 
         if steps >= max_steps {
             break;

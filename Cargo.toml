@@ -22,3 +22,4 @@ iced = { version = "0.4", default-features = false, features = ["glow", "canvas"
 quadtree-f32 = "0.4"
 native-dialog = { version = "0.6", features = ["windows_dpi_awareness", "windows_visual_styles"] }
 mpi = { git = "https://github.com/rsmpi/rsmpi.git", default-features = false }
+ctrlc = { version = "3.0", features = ["termination"] }
