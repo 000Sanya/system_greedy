@@ -149,6 +149,18 @@ pub fn runner_one_thread<S: AlgorithmState, F: FnMut(&mut System, &RefCellStateR
     state_register.minimal_state().unwrap()
 }
 
+lazy_static::lazy_static! {
+    static ref WORKING: Arc<AtomicBool> = {
+        let working = Arc::new(AtomicBool::new(true));
+        let w = working.clone();
+        ctrlc::set_handler(move || {
+            println!("Wait step for closing");
+            w.store(false, Ordering::SeqCst);
+        }).unwrap();
+        working
+    };
+}
+
 pub fn runner_multi_thread<S: AlgorithmState + Sync, F: Fn(&mut System, &MutexStateRegisterer, &S) + Sync + Send>(
     mut system: System,
     mut algorithm_state: S,
@@ -156,22 +168,12 @@ pub fn runner_multi_thread<S: AlgorithmState + Sync, F: Fn(&mut System, &MutexSt
     thread_count: usize,
     mut f: F,
 ) -> State {
-    let is_work = Arc::new(AtomicBool::new(true));
-
-    let isw = is_work.clone();
-
-    println!("Setup ctrl-c");
-    ctrlc::set_handler(move || {
-        println!("Wait step for closing");
-        isw.store(false, Ordering::SeqCst);
-    }).unwrap();
-
     let mut state_register = MutexStateRegisterer(Mutex::new(StateRegistererInner::new()));
     let mut steps = 0;
     let mut all_steps = 0;
 
     let mut systems = vec![system.clone(); thread_count];
-    while !state_register.0.lock().unwrap().diff_between_mins(1e-8) && is_work.load(Ordering::SeqCst) {
+    while !state_register.0.lock().unwrap().diff_between_mins(1e-8) && WORKING.load(Ordering::SeqCst) {
 
         if steps >= max_steps {
             break;

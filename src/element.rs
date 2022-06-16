@@ -16,6 +16,11 @@ impl Element {
     }
 
     #[inline(always)]
+    pub fn magn(&self) -> Vec2 {
+        self.magn.map(|x| x.0)
+    }
+
+    #[inline(always)]
     pub fn energy_with(&self, element: &Element) -> f64 {
         let pij = self.pos.map(|x| x.0) - element.pos.map(|x| x.0);
 

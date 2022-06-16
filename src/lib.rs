@@ -126,18 +126,21 @@ pub fn prepare_state(system: &System) -> GibridState {
     let mut max = usize::MIN;
 
     let mut radius = 0.0;
-    let rnd_count = 20;
+    let rnd_count = 19;
 
     let max_radius = system.max_radius();
 
-    while max <= rnd_count && radius < max_radius {
+    while max < rnd_count && radius < max_radius {
         for i in 0..system.size() {
             let count = system.neighbors(i, radius).count();
             min = min.min(count);
-            max = max.max(count)
+            max = dbg!(max.max(count));
         }
         radius += 10.0;
     }
+
+    dbg!(radius);
+    dbg!(max);
 
     let (states_map, identity_map) = get_states(&system, radius);
 

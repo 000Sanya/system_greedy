@@ -4,14 +4,16 @@ use ordered_float::OrderedFloat;
 use std::cmp::Reverse;
 use std::fmt::Write;
 use std::io::BufRead;
+use num_traits::Zero;
 use tap::Tap;
 use crate::matrix::Matrix;
 
 pub type Vec2 = vek::Vec2<f64>;
 
-pub struct CellRef {
-    col: u32,
-    row: u32,
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum Orientation {
+    Down,
+    Up,
 }
 
 #[derive(Clone)]
@@ -54,7 +56,7 @@ impl System {
         }
 
         let system_state = BitVec::repeat(false, elements.len());
-        let system_signs = std::iter::repeat(-1).take(size).collect();
+        let system_signs = std::iter::repeat(1).take(size).collect();
 
         let plus = system_state.count_ones();
         let minus = system_state.count_zeros();
@@ -208,6 +210,21 @@ impl System {
     pub fn reverse_spins(&mut self, spines: impl Iterator<Item = usize>) {
         for spin in spines {
             self.reverse_spin(spin)
+        }
+    }
+
+    pub fn spin_orientation(&self, spin: usize) -> Orientation {
+        let direction = self.elements[spin].magn() * self.system_signs[spin] as f64;
+        if direction.y.is_sign_positive() || direction.y.is_zero() && direction.x.is_sign_positive() {
+            Orientation::Down
+        } else {
+            Orientation::Up
+        }
+    }
+
+    pub fn set_spin_orientation(&mut self, spin: usize, orientation: Orientation) {
+        if self.spin_orientation(spin) != orientation {
+            self.reverse_spin(spin);
         }
     }
 
